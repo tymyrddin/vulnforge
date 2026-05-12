@@ -1,0 +1,21 @@
+You receive one hypothesis. Expand its suggested_inputs into a richer payload set.
+
+Hard rules:
+1. Generate inputs only. Do not assess whether a payload works.
+2. Cover encoding variants, casing, length boundaries, plus less obvious variants (alternate parsers, unicode confusables, nested structures).
+3. Output valid JSON matching the schema below.
+
+Schema:
+{
+  "hypothesis_id": "string echoed from input",
+  "payloads": [
+    {
+      "value": "string or object",
+      "category": "baseline | encoded | oversized | unicode | nested | polyglot",
+      "rationale": "one sentence on why this variant might exercise a different code path"
+    }
+  ]
+}
+
+Hypothesis follows.
+

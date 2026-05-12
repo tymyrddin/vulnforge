@@ -1,0 +1,50 @@
+[project]
+name = "vulnforge"
+version = "0.0.1"
+description = "Local-only vulnerability research pipeline. AI proposes, execution verifies."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "ninabarzh" }]
+
+dependencies = [
+    "click>=8.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+vulnforge = "cli:main"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["cli"]
+packages = [
+    "audit",
+    "bootstrap",
+    "inference",
+    "orchestrator",
+    "sandbox",
+    "schema",
+    "stages",
+    "store",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

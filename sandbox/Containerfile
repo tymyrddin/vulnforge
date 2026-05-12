@@ -1,0 +1,31 @@
+# Minimal sandbox image. Built once by bootstrap/build_sandbox.py.
+#
+# Contains python3, build tools for native fuzzing targets, and llama.cpp's
+# llama-cli binary built from a pinned tag. Network is restricted at runtime
+# by the caller (--network=none in sandbox/run.py), not by the image.
+#
+# Keeping the image lean is deliberate: anything that lands inside this image
+# is something an escaped payload could use.
+
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        clang \
+        llvm \
+        ca-certificates \
+        build-essential \
+        cmake \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG LLAMA_TAG=b3850
+RUN git clone --depth 1 --branch ${LLAMA_TAG} \
+        https://github.com/ggerganov/llama.cpp /tmp/llama.cpp \
+    && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DLLAMA_CURL=OFF \
+    && cmake --build /tmp/llama.cpp/build --target llama-cli -j \
+    && cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli \
+    && rm -rf /tmp/llama.cpp
+
+USER 65534:65534
+WORKDIR /work

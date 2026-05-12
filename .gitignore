@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Vulnforge runtime: content store, audit log, fetched weights, built-image lock.
+# Bootstrap output (sandbox.lock) is also gitignored; it is per-machine state.
+.vulnforge/
+bootstrap/sandbox.lock
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+CLAUDE.md
+settings.local.json

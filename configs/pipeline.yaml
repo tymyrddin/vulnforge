@@ -1,0 +1,19 @@
+# Pipeline definition. The orchestrator runs stages in order; each stage's
+# output ref is the next stage's input. Model aliases refer to entries in
+# bootstrap/models.lock.
+
+stages:
+  - name: ingest
+  - name: index
+  - name: hypothesise
+    model: qwen2.5-coder-7b
+    seed: 1
+    max_tokens: 1024
+  - name: synthesise
+    model: qwen2.5-coder-7b
+    seed: 2
+    max_tokens: 512
+  - name: execute
+    timeout_seconds: 60
+  - name: verify
+  - name: report
