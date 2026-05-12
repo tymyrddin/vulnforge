@@ -186,14 +186,24 @@ def _extract_first_json_object(text: str) -> str:
               help="Sandbox timeout in seconds.")
 @click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
               default=None, help="Workspace directory (overrides default run dir).")
+@click.option("--debug-llama", is_flag=True,
+              help="Stream llama.cpp's own load and timing logs to stderr "
+                   "instead of suppressing them (--log-disable -> --log-file).")
 def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
-          timeout: int, workspace_opt: Path | None) -> None:
+          timeout: int, workspace_opt: Path | None, debug_llama: bool) -> None:
     """Run the hypothesise prompt against SOURCE (a single file).
 
     Bypasses the staged pipeline. Prints raw model output, then attempts to
     parse it as JSON and reconstruct each hypothesis through the schema gate.
     Hypotheses that violate the schema (e.g. claiming CONFIRMED at propose
     time) are reported as rejected.
+
+    Run artefacts under the workspace root:
+      probe-prompt.txt       exact prompt sent to the sandbox
+      probe-output.txt       raw post-strip model output
+      probe-extracted.txt    the {...} block we attempted to parse
+      probe-parsed.json      extracted JSON object, after json.loads succeeds
+      probe-rejections.jsonl one line per rejected hypothesis (only if any)
     """
     import json
 
@@ -227,9 +237,14 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
     source_text = source.read_text()
     prompt = f"{prompt_template}{source_text}"
 
+    ws.root.mkdir(parents=True, exist_ok=True)
+    prompt_path = ws.root / "probe-prompt.txt"
+    prompt_path.write_text(prompt)
+
     click.echo(f"source:   {source} ({len(source_text)} chars)")
     click.echo(f"weights:  {spec.alias}")
     click.echo(f"image:    {image_hash[:12]}")
+    click.echo(f"prompt:   {prompt_path}")
     click.echo(f"stderr:   {ws.logs_dir}/llama-*.log")
     click.echo("inference running inside sandbox...")
 
@@ -243,10 +258,10 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
         ctx_size=ctx_size,
         timeout_seconds=timeout,
         log_dir=ws.logs_dir,
+        debug_llama=debug_llama,
     )
 
     raw_path = ws.root / "probe-output.txt"
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
     raw_path.write_text(result.output_text)
 
     click.echo()
@@ -258,18 +273,26 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
         json_blob = _extract_first_json_object(result.output_text)
     except ValueError as e:
         raise click.ClickException(f"no JSON object in output: {e}")
+    extracted_path = ws.root / "probe-extracted.txt"
+    extracted_path.write_text(json_blob)
+    click.echo(f"extract:  {extracted_path}")
     try:
         data = json.loads(json_blob)
     except json.JSONDecodeError as e:
         raise click.ClickException(f"extracted blob is not valid JSON: {e}")
+
+    parsed_path = ws.root / "probe-parsed.json"
+    parsed_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    click.echo(f"parsed:   {parsed_path}")
+
     if not isinstance(data, dict) or "hypotheses" not in data:
         raise click.ClickException("output JSON has no 'hypotheses' key")
     if not isinstance(data["hypotheses"], list):
         raise click.ClickException("'hypotheses' is not a list")
 
     click.echo("=== parsed hypotheses ===")
+    rejections: list[dict] = []
     accepted = 0
-    rejected = 0
     for i, item in enumerate(data["hypotheses"]):
         try:
             h = Hypothesis.propose(
@@ -277,7 +300,7 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
                 location=item["location"],
                 assumption_broken=item["assumption_broken"],
                 expected_effect=item["expected_effect"],
-                suggested_inputs=tuple(item.get("suggested_inputs", []) or []),
+                suggested_inputs=item.get("suggested_inputs", []),
                 confidence=float(item["confidence"]),
                 model_hash=result.weights_hash,
                 evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
@@ -291,10 +314,19 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             )
             accepted += 1
         except (KeyError, TypeError, ValueError) as e:
-            click.echo(f"  [{i}] rejected {type(e).__name__}: {e}")
-            rejected += 1
+            reason = f"{type(e).__name__}: {e}"
+            click.echo(f"  [{i}] rejected {reason}")
+            rejections.append({"index": i, "raw": item, "rejection": reason})
+
+    if rejections:
+        rejections_path = ws.root / "probe-rejections.jsonl"
+        with rejections_path.open("w") as f:
+            for r in rejections:
+                f.write(json.dumps(r, sort_keys=True) + "\n")
+        click.echo(f"rejected: {rejections_path}")
+
     click.echo()
-    click.echo(f"summary:  {accepted} accepted, {rejected} rejected")
+    click.echo(f"summary:  {accepted} accepted, {len(rejections)} rejected")
 
 
 if __name__ == "__main__":

@@ -63,7 +63,7 @@ class Hypothesis:
         location: str,
         assumption_broken: str,
         expected_effect: str,
-        suggested_inputs: tuple[str, ...],
+        suggested_inputs: list[str],
         confidence: float,
         model_hash: str,
         evidence_type: EvidenceType = EvidenceType.STATIC_PATTERN,
@@ -79,7 +79,17 @@ class Hypothesis:
                 "the model cannot claim EXECUTION_OBSERVED evidence at "
                 "propose-time; execution evidence comes from stages/execute.py"
             )
+        if not isinstance(suggested_inputs, list):
+            raise TypeError(
+                f"suggested_inputs must be a list of strings, "
+                f"got {type(suggested_inputs).__name__}"
+            )
         for s in suggested_inputs:
+            if not isinstance(s, str):
+                raise TypeError(
+                    f"suggested_inputs element must be a string, "
+                    f"got {type(s).__name__}: {s!r}"
+                )
             if _FORBIDDEN_INPUT_CHARS.search(s):
                 raise ValueError(
                     f"suggested_inputs must be concrete strings, not "
@@ -91,7 +101,7 @@ class Hypothesis:
             location=location,
             assumption_broken=assumption_broken,
             expected_effect=expected_effect,
-            suggested_inputs=suggested_inputs,
+            suggested_inputs=tuple(suggested_inputs),
             confidence=confidence,
             status=Status.PROPOSED,
             evidence_type=evidence_type,

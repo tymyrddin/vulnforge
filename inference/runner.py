@@ -82,6 +82,7 @@ def infer(
     cpus: str = "4",
     ctx_size: int = 4096,
     log_dir: Path | None = None,
+    debug_llama: bool = False,
 ) -> InferenceResult:
     actual = _file_sha256(weights_path)
     if actual != weights_hash:
@@ -92,6 +93,7 @@ def infer(
     if log_dir is not None:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         stderr_log_path = log_dir / f"llama-{stamp}-seed{seed}.log"
+    log_args = ["--log-file", "/dev/stderr"] if debug_llama else ["--log-disable"]
     result = run(
         image=sandbox_image,
         command=[
@@ -103,7 +105,7 @@ def infer(
             "--temp", str(temperature),
             "--no-display-prompt",
             "--single-turn",
-            "--log-disable",
+            *log_args,
             "--simple-io",
             "--no-warmup",
             "--file", "/dev/stdin",

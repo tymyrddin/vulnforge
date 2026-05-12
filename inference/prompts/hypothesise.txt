@@ -24,10 +24,7 @@ Schema:
       "location": "file:function or file:line",
       "assumption_broken": "the invariant the attack would violate",
       "expected_effect": "what the verifier would observe if the hypothesis holds",
-      "suggested_inputs": {
-        "type": "array",
-        "items": {"type": "string", "pattern": "^[^*()]+$"}
-      },
+      "suggested_inputs": ["AAAAAAAAAAAAAAAAAAAA", "user' OR '1'='1"],
       "confidence": 0.0,
       "evidence_type": "static_pattern | behaviour_inferred",
       "verification_status": "unverified"
