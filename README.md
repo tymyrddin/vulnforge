@@ -53,15 +53,21 @@ vulnforge/
   orchestrator/        stage sequencing from configs/pipeline.yaml
   configs/
     pipeline.yaml      which stages, which model per stage
+  docs/                design notes (design-choices.md, run-concept.md, trust-path.md)
   tests/
   cli.py
 ```
 
 Runtime data lives outside the framework checkout under `$XDG_DATA_HOME/vulnforge/` (fallback
-`~/.local/share/vulnforge/`). Weights live at `weights/` and persist across runs. Every scan run creates its own
-directory at `runs/<run-id>/` holding the object store, refs, audit log, llama stderr logs, and reports. Set
-`VULNFORGE_WORKSPACE` or pass `--workspace` to override. The built-image hash sits in `bootstrap/sandbox.lock`
-inside the checkout (gitignored, since it is per-machine state).
+`~/.local/share/vulnforge/`), in three sibling directories:
+
+- `weights/` model weights fetched by bootstrap, shared across runs.
+- `corpus/` input files to be analysed. Persistent and user-curated; the framework reads it, never writes to it.
+- `runs/<run-id>/` per-scan artefacts: the object store, refs, audit log, llama stderr logs, reports, and probe
+  artefacts. Isolated per run.
+
+Set `VULNFORGE_WORKSPACE` or pass `--workspace` to override the root. The built-image hash sits in
+`bootstrap/sandbox.lock` inside the checkout (gitignored, since it is per-machine state).
 
 ## Requirements
 
@@ -104,40 +110,52 @@ warnings, if the noise bothers you, is a one-liner: set `default_capabilities = 
 `inference/runner.py` passes `--log-disable` to `llama-cli` so the assistant's reply is the only thing on stdout.
 The trade-off is that llama.cpp's own load and timing chatter no longer reaches the per-run stderr log under
 the workspace `logs/` directory. Hard failures still surface: the dynamic linker and the kernel write to stderr
-regardless, and
-`infer()` raises on a non-zero exit. If load diagnostics matter for a session, swap `--log-disable` for
-`--log-file /dev/stderr` in `inference/runner.py`; that routes llama.cpp's logs back into the captured stderr while
-keeping stdout clean.
+regardless, and `infer()` raises on a non-zero exit. If load diagnostics matter for a session, pass `--debug-llama`
+to `vulnforge probe`; that flips the flag to `--log-file /dev/stderr` for that one run and the captured stderr log
+fills up.
 
 ## Usage
 
 ```
-vulnforge bootstrap          # fetch weights, build sandbox image (one-off, online)
-vulnforge plumbing           # end-to-end smoke test (after bootstrap)
-vulnforge scan path/to/repo  # run the pipeline (offline)
-vulnforge audit-verify       # walk the audit log hash chain
+vulnforge bootstrap                       # fetch weights, build sandbox image (one-off, online)
+vulnforge plumbing                        # end-to-end smoke test (after bootstrap)
+vulnforge scan path/to/repo               # run the staged pipeline (offline)
+vulnforge probe path/to/file              # one-shot hypothesise against a single file
+vulnforge audit-verify --workspace <dir>  # walk a run's audit log hash chain
 ```
 
-The pytest version of the smoke test lives at `tests/test_plumbing.py` and skips on hosts that have not bootstrapped:
+`probe` bypasses the staged pipeline and is the fastest way to exercise the prompt and schema layer without the
+later stages. Each probe run writes `probe-prompt.txt`, `probe-output.txt`, `probe-extracted.txt`, `probe-parsed.json`,
+and (if any) `probe-rejections.jsonl` under its workspace root, so every failure layer leaves a trace.
+
+The pytest suite lives under `tests/`. `test_plumbing.py` is the end-to-end inference smoke test; `test_sandbox_cleanup.py`
+asserts that no `vulnforge-*` containers survive a clean exit or a forced timeout. Both skip on hosts that have not
+bootstrapped:
 
 ```
-pytest tests/test_plumbing.py -v
+pytest tests/ -v
 ```
 
 ## Done
 
 Infrastructure: real and runnable.
 
-- Frozen schema types with a state machine that refuses bad transitions.
+- Frozen schema types (`Status`, `EvidenceType`, `VerificationStatus`) with a state machine that refuses bad
+  transitions. The model cannot propose a hypothesis as `CONFIRMED` or `EXECUTION_OBSERVED`; those values are
+  stage-owned. `suggested_inputs` is constrained at the schema gate (no expression-shaped strings).
 - Content-addressed object store with atomic writes and on-read hash verification.
 - Hash-chained audit log with tamper detection.
-- Canonical podman sandbox invocation.
+- Canonical podman sandbox invocation. Containers are owned resources: each one is named, registered in a
+  module-level set on creation, and torn down through one `_cleanup` function reachable from every exit path
+  (normal return, timeout, SIGINT, SIGTERM, atexit). `tests/test_sandbox_cleanup.py` enforces the invariant.
 - llama.cpp subprocess runner (passes prompt via stdin so it does not appear in `/proc`).
 - Bootstrap fetch with SHA256 verification.
+- Workspace separation: framework checkout is immutable; runtime artefacts live under `$XDG_DATA_HOME/vulnforge/`.
+- `vulnforge probe` for one-shot hypothesis generation with per-failure-layer artefacts.
 
 Stages: skeletal. `ingest` walks a repo into the store. `index`, `hypothesise`, `synthesise`, `execute`, `verify`,
 `report` raise `NotImplementedError`. The data flow and trust boundaries are wired in; what is missing is the analysis
-content.
+content. See `docs/design-choices.md` for the load-bearing decisions and `docs/run-concept.md` for the open forks.
 
 ## Another note
 
