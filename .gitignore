@@ -41,5 +41,3 @@ bootstrap/sandbox.lock
 !.env.example
 *.key
 *.pem
-CLAUDE.md
-settings.local.json
