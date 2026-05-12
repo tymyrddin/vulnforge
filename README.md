@@ -136,7 +136,7 @@ bootstrapped:
 pytest tests/ -v
 ```
 
-## Done
+## Done and doing
 
 Infrastructure: real and runnable.
 
@@ -154,8 +154,11 @@ Infrastructure: real and runnable.
 - `vulnforge probe` for one-shot hypothesis generation with per-failure-layer artefacts.
 
 Stages: skeletal. `ingest` walks a repo into the store. `index`, `hypothesise`, `synthesise`, `execute`, `verify`,
-`report` raise `NotImplementedError`. The data flow and trust boundaries are wired in; what is missing is the analysis
-content. See `docs/design-choices.md` for the load-bearing decisions and `docs/run-concept.md` for the open forks.
+`report` raise `NotImplementedError`. The data flow and trust boundaries are wired in; what is still to be done is the 
+analysis content. A few more tests could also not hurt. 
+
+See [docs/design-choices.md](docs/design-choices.md) for the load-bearing decisions and 
+[docs/run-concept.md](docs/run-concept.md) for the open forks (in the road).
 
 ## Another note
 
