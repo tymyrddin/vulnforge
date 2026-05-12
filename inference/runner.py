@@ -14,8 +14,6 @@ from pathlib import Path
 
 from sandbox.run import Mount, run
 
-DEFAULT_LOG_DIR = Path(".vulnforge/logs")
-
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _TIMINGS_RE = re.compile(r"\n*\[\s*Prompt:.*", re.DOTALL)
 
@@ -83,7 +81,7 @@ def infer(
     memory: str = "8g",
     cpus: str = "4",
     ctx_size: int = 4096,
-    log_dir: Path | None = DEFAULT_LOG_DIR,
+    log_dir: Path | None = None,
 ) -> InferenceResult:
     actual = _file_sha256(weights_path)
     if actual != weights_hash:

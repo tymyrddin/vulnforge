@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import dataclasses
 
-from schema.hypothesis import Hypothesis, Status
+from schema.hypothesis import (
+    EvidenceType,
+    Hypothesis,
+    Status,
+    VerificationStatus,
+)
 
 
 def mark_tested(h: Hypothesis, attempts: int) -> Hypothesis:
@@ -18,6 +23,8 @@ def mark_tested(h: Hypothesis, attempts: int) -> Hypothesis:
     return dataclasses.replace(
         h,
         status=Status.TESTED,
+        evidence_type=EvidenceType.EXECUTION_OBSERVED,
+        verification_status=VerificationStatus.TESTED,
         provenance=f"{h.provenance};tested:{attempts}",
     )
 

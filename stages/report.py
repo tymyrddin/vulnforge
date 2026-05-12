@@ -1,5 +1,5 @@
 """Report stage: emit human-readable findings from a verdicts ref. Output is a
-plain file under .vulnforge/reports/; the audit log retains the canonical
+plain file under ``<workspace>/reports/``; the audit log retains the canonical
 provenance."""
 from __future__ import annotations
 

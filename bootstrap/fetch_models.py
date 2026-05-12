@@ -6,8 +6,9 @@ The expected workflow:
   3. The analysis host can now run offline.
 
 If weights are fetched on a different machine and copied across by hand, place
-them at .vulnforge/weights/<alias>.gguf and run `vulnforge bootstrap --verify-only`
-to confirm hashes match the lock file.
+them at ``$XDG_DATA_HOME/vulnforge/weights/<alias>.gguf`` (fallback
+``~/.local/share/vulnforge/weights/<alias>.gguf``) and run
+``vulnforge bootstrap --verify-only`` to confirm hashes match the lock file.
 """
 from __future__ import annotations
 
@@ -18,7 +19,8 @@ from pathlib import Path
 
 import yaml
 
-WEIGHTS_DIR = Path(".vulnforge/weights")
+from workspace import weights_dir
+
 LOCK_FILE = Path("bootstrap/models.lock")
 
 
@@ -30,7 +32,7 @@ class ModelSpec:
 
     @property
     def dest(self) -> Path:
-        return WEIGHTS_DIR / f"{self.alias}.gguf"
+        return weights_dir() / f"{self.alias}.gguf"
 
 
 def load_specs() -> list[ModelSpec]:
@@ -47,7 +49,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def fetch_all(verify_only: bool = False) -> None:
-    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    weights_dir().mkdir(parents=True, exist_ok=True)
     specs = load_specs()
     if not specs:
         print("bootstrap/models.lock has no entries; nothing to fetch")

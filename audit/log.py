@@ -9,12 +9,15 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict
-from pathlib import Path
 
 from schema.audit_event import AuditEvent
+from workspace import active
 
-LOG_PATH = Path(".vulnforge/audit/log.jsonl")
 GENESIS = "0" * 64
+
+
+def _log_path():
+    return active().audit_log
 
 
 def _canonical(record: dict) -> bytes:
@@ -22,9 +25,10 @@ def _canonical(record: dict) -> bytes:
 
 
 def _last_entry_hash() -> str:
-    if not LOG_PATH.exists():
+    log = _log_path()
+    if not log.exists():
         return GENESIS
-    with LOG_PATH.open("rb") as f:
+    with log.open("rb") as f:
         f.seek(0, 2)
         size = f.tell()
         f.seek(max(0, size - 4096))
@@ -36,13 +40,14 @@ def _last_entry_hash() -> str:
 
 
 def append(event: AuditEvent) -> str:
-    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    log = _log_path()
+    log.parent.mkdir(parents=True, exist_ok=True)
     prev = _last_entry_hash()
     body = asdict(event)
     body["prev_hash"] = prev
     entry_hash = hashlib.sha256(_canonical(body)).hexdigest()
     record = {**body, "entry_hash": entry_hash}
-    with LOG_PATH.open("a") as f:
+    with log.open("a") as f:
         f.write(json.dumps(record, sort_keys=True) + "\n")
     return entry_hash
 
@@ -50,11 +55,12 @@ def append(event: AuditEvent) -> str:
 def verify_chain() -> int:
     """Walk the log from genesis. Returns the number of valid entries.
     Raises ValueError on the first broken link."""
-    if not LOG_PATH.exists():
+    log = _log_path()
+    if not log.exists():
         return 0
     prev = GENESIS
     count = 0
-    with LOG_PATH.open() as f:
+    with log.open() as f:
         for n, line in enumerate(f, 1):
             entry = json.loads(line)
             stored_hash = entry.pop("entry_hash")

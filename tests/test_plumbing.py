@@ -16,13 +16,14 @@ import pytest
 from click.testing import CliRunner
 
 from cli import main
+from workspace import weights_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 
 skip_if_unbootstrapped = pytest.mark.skipif(
     shutil.which("podman") is None
     or not (ROOT / "bootstrap/sandbox.lock").exists()
-    or not (ROOT / ".vulnforge/weights/plumbing-check.gguf").exists(),
+    or not (weights_dir() / "plumbing-check.gguf").exists(),
     reason="vulnforge bootstrap has not run (podman, sandbox image, or weights missing)",
 )
 

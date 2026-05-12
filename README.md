@@ -57,8 +57,11 @@ vulnforge/
   cli.py
 ```
 
-Runtime data lives under `.vulnforge/` (gitignored): the object store, the audit log, the fetched weights. The
-built-image hash sits in `bootstrap/sandbox.lock` (also gitignored, since it is per-machine state).
+Runtime data lives outside the framework checkout under `$XDG_DATA_HOME/vulnforge/` (fallback
+`~/.local/share/vulnforge/`). Weights live at `weights/` and persist across runs. Every scan run creates its own
+directory at `runs/<run-id>/` holding the object store, refs, audit log, llama stderr logs, and reports. Set
+`VULNFORGE_WORKSPACE` or pass `--workspace` to override. The built-image hash sits in `bootstrap/sandbox.lock`
+inside the checkout (gitignored, since it is per-machine state).
 
 ## Requirements
 
@@ -100,7 +103,8 @@ warnings, if the noise bothers you, is a one-liner: set `default_capabilities = 
 
 `inference/runner.py` passes `--log-disable` to `llama-cli` so the assistant's reply is the only thing on stdout.
 The trade-off is that llama.cpp's own load and timing chatter no longer reaches the per-run stderr log under
-`.vulnforge/logs/`. Hard failures still surface: the dynamic linker and the kernel write to stderr regardless, and
+the workspace `logs/` directory. Hard failures still surface: the dynamic linker and the kernel write to stderr
+regardless, and
 `infer()` raises on a non-zero exit. If load diagnostics matter for a session, swap `--log-disable` for
 `--log-file /dev/stderr` in `inference/runner.py`; that routes llama.cpp's logs back into the captured stderr while
 keeping stdout clean.

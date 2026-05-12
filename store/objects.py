@@ -1,7 +1,8 @@
-"""Content-addressed blobs under .vulnforge/store/objects/ab/cd/abcd...
+"""Content-addressed blobs under ``<workspace>/store/objects/ab/cd/abcd...``.
 
 Writes are atomic (tempfile + rename). Reads verify the digest. Nothing here
-deletes objects; the store is append-only by convention.
+deletes objects; the store is append-only by convention. The store location is
+determined by the active :mod:`workspace`, set once at the CLI entry point.
 """
 from __future__ import annotations
 
@@ -10,11 +11,11 @@ import os
 import tempfile
 from pathlib import Path
 
-STORE_ROOT = Path(".vulnforge/store/objects")
+from workspace import active
 
 
 def _path_for(digest: str) -> Path:
-    return STORE_ROOT / digest[:2] / digest[2:4] / digest[4:]
+    return active().store_root / digest[:2] / digest[2:4] / digest[4:]
 
 
 def put(data: bytes) -> str:

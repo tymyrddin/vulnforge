@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from schema.hypothesis import Hypothesis, Status
+from schema.hypothesis import Hypothesis, Status, VerificationStatus
 
 
 def confirm(h: Hypothesis, evidence: str) -> Hypothesis:
@@ -18,6 +18,7 @@ def confirm(h: Hypothesis, evidence: str) -> Hypothesis:
     return dataclasses.replace(
         h,
         status=Status.CONFIRMED,
+        verification_status=VerificationStatus.CONFIRMED,
         provenance=f"{h.provenance};confirmed:{evidence}",
     )
 

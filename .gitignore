@@ -30,8 +30,10 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Vulnforge runtime: content store, audit log, fetched weights, built-image lock.
-# Bootstrap output (sandbox.lock) is also gitignored; it is per-machine state.
+# Vulnforge runtime should live under $XDG_DATA_HOME/vulnforge/, not in the
+# checkout. This entry is defensive: catches stray .vulnforge/ directories
+# that earlier versions wrote here, or that a user creates by mistake.
+# Bootstrap output (sandbox.lock) is per-machine state.
 .vulnforge/
 bootstrap/sandbox.lock
 

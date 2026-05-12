@@ -8,6 +8,17 @@ from pathlib import Path
 
 import click
 
+import workspace
+
+
+def _resolve_workspace(workspace_opt: Path | None) -> workspace.Workspace:
+    if workspace_opt is not None:
+        ws = workspace.Workspace.at(workspace_opt)
+    else:
+        ws = workspace.new_run()
+    workspace.use(ws)
+    return ws
+
 
 @click.group()
 def main() -> None:
@@ -21,6 +32,7 @@ def bootstrap(verify_only: bool, skip_image: bool) -> None:
     """Fetch weights, build the sandbox image. The only network-using step."""
     from bootstrap import build_sandbox, fetch_models
 
+    click.echo(f"weights:  {workspace.weights_dir()}")
     fetch_models.fetch_all(verify_only=verify_only)
     if not verify_only and not skip_image:
         image_hash = build_sandbox.build()
@@ -29,18 +41,26 @@ def bootstrap(verify_only: bool, skip_image: bool) -> None:
 
 @main.command()
 @click.argument("repo", type=click.Path(exists=True, file_okay=False, path_type=Path))
-def scan(repo: Path) -> None:
+@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
+              default=None, help="Workspace directory (overrides default run dir).")
+def scan(repo: Path, workspace_opt: Path | None) -> None:
     """Run the analysis pipeline against REPO."""
     from orchestrator import pipeline
 
+    ws = _resolve_workspace(workspace_opt)
+    click.echo(f"workspace: {ws.root}")
     pipeline.run(repo_path=repo)
+    click.echo(f"workspace: {ws.root}")
 
 
 @main.command(name="audit-verify")
-def audit_verify() -> None:
+@click.option("--workspace", "workspace_opt", type=click.Path(exists=True, path_type=Path),
+              required=True, help="Workspace directory to verify.")
+def audit_verify(workspace_opt: Path) -> None:
     """Walk the audit log and check every hash link."""
     from audit.log import verify_chain
 
+    workspace.use(workspace.Workspace.at(workspace_opt))
     count = verify_chain()
     click.echo(f"{count} entries verified")
 
@@ -53,7 +73,10 @@ def audit_verify() -> None:
 @click.option("--max-tokens", default=16, show_default=True, type=int)
 @click.option("--timeout", default=120, show_default=True, type=int,
               help="Sandbox timeout in seconds.")
-def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int) -> None:
+@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
+              default=None, help="Workspace directory (overrides default run dir).")
+def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int,
+             workspace_opt: Path | None) -> None:
     """End-to-end smoke test. Needs `vulnforge bootstrap` to have completed.
 
     Confirms: podman runs, the sandbox image is built, the named weights are
@@ -62,6 +85,9 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int) -> None:
     """
     from bootstrap import build_sandbox, fetch_models
     from inference.runner import infer
+
+    ws = _resolve_workspace(workspace_opt)
+    click.echo(f"workspace: {ws.root}")
 
     try:
         version = subprocess.check_output(["podman", "--version"], text=True).strip()
@@ -93,7 +119,7 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int) -> None:
     click.echo(f"weights:  {spec.alias} ({spec.dest})")
 
     click.echo("inference running inside sandbox...")
-    click.echo("stderr log: .vulnforge/logs/llama-*.log")
+    click.echo(f"stderr log: {ws.logs_dir}/llama-*.log")
     result = infer(
         prompt=prompt,
         weights_path=spec.dest,
@@ -102,6 +128,7 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int) -> None:
         seed=1,
         max_tokens=max_tokens,
         timeout_seconds=timeout,
+        log_dir=ws.logs_dir,
     )
     click.echo(f"output:   {result.output_text.strip()!r}")
     click.echo(f"hashes:   weights={result.weights_hash[:12]} "
