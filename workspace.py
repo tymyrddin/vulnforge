@@ -1,11 +1,16 @@
-"""Where a scan run writes its artefacts.
+"""Where a scan run writes its artefacts, and where its inputs come from.
 
-The framework checkout is immutable. Every run lands in its own directory
-under ``$XDG_DATA_HOME/vulnforge/runs/<run-id>/`` (fallback
-``~/.local/share/vulnforge/runs/<run-id>/``). Weights are shared across runs
-and live separately under the same root at ``weights/``.
+Three categories under the XDG root, kept distinct on purpose:
 
-Resolution order for the root:
+  - ``weights/`` — model weights, fetched once, shared across runs.
+  - ``corpus/`` — the input corpus: source files the user wants analysed.
+    Persistent and curated; the framework reads it, never writes to it.
+  - ``runs/<run-id>/`` — per-run artefacts the system produces (object
+    store, refs, audit log, llama stderr logs, reports). Isolated per scan.
+
+``/tmp`` is reserved for truly transient scratch and is not a corpus.
+
+Resolution order for the XDG root:
   1. ``$VULNFORGE_WORKSPACE`` (if set)
   2. ``$XDG_DATA_HOME/vulnforge`` (if XDG_DATA_HOME is set)
   3. ``~/.local/share/vulnforge``
@@ -34,6 +39,10 @@ def _root() -> Path:
 
 def weights_dir() -> Path:
     return _root() / "weights"
+
+
+def corpus_dir() -> Path:
+    return _root() / "corpus"
 
 
 def runs_root() -> Path:

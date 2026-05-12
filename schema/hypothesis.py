@@ -16,8 +16,11 @@ Three orthogonal fields carry related-but-distinct information:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
+
+_FORBIDDEN_INPUT_CHARS = re.compile(r"[*()]")
 
 
 class Status(str, Enum):
@@ -76,6 +79,13 @@ class Hypothesis:
                 "the model cannot claim EXECUTION_OBSERVED evidence at "
                 "propose-time; execution evidence comes from stages/execute.py"
             )
+        for s in suggested_inputs:
+            if _FORBIDDEN_INPUT_CHARS.search(s):
+                raise ValueError(
+                    f"suggested_inputs must be concrete strings, not "
+                    f"expressions: {s!r} contains one of * ( ). "
+                    f"Write the literal characters instead."
+                )
         return cls(
             attack_type=attack_type,
             location=location,
