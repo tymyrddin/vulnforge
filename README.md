@@ -1,8 +1,8 @@
-# Vulnforge sketch
+# Vulnforge sketch (PoC)
 
 A vulnerability research pipeline built around a single rule: *nothing is a vulnerability until execution says so.*
 
-AI proposes. Tools test. The system verifies. The model is never the judge of truth.
+[AI proposes. Tools test. The system verifies. The model is never the judge of truth.](https://broomstick.tymyrddin.dev/posts/model-is-not-system/)
 
 ## Design constraints
 
@@ -60,6 +60,20 @@ vulnforge/
 Runtime data lives under `.vulnforge/` (gitignored): the object store, the audit log, the fetched weights. The
 built-image hash sits in `bootstrap/sandbox.lock` (also gitignored, since it is per-machine state).
 
+## Requirements
+
+- Linux with rootless podman on PATH. Ubuntu 24.04 is the tested baseline.
+- An x86_64 CPU with AVX2 (llama.cpp needs it).
+- Around 10 GiB free disk for weights, the built sandbox image, and the build cache.
+- RAM: 8 GiB is enough for the `plumbing-check` smoke test (a 1.1 GiB model). The default Qwen 7B inference runs in
+  an 8 GiB cgroup (4.4 GiB weights plus KV cache plus compute buffers land around 5 GiB), so 16 GiB host RAM leaves
+  room for the desktop. Swap thrashing during model load is the usual cause of an unresponsive machine; closing
+  memory-heavy apps first can avoid it.
+- Network access for the bootstrap step only. The analysis host can be offline afterwards.
+
+The cgroup caps live in `inference/runner.py` (the `memory` and `cpus` arguments to `infer`) and `sandbox/run.py`
+(defaults for non-inference workloads). Tune if your hardware sits at either end of these numbers.
+
 ## Setup
 
 In an activated venv:
@@ -68,8 +82,28 @@ In an activated venv:
 pip install -e .             # one-off; puts `vulnforge` on PATH
 ```
 
-Prerequisites: rootless podman on PATH, around 10 GiB free disk, network access for the bootstrap step. After bootstrap
-the host can be offline.
+Pinning a snapshot of a fast-moving upstream like llama.cpp is a trade-off. The `LLAMA_TAG` default in
+`sandbox/Containerfile` names a specific release tag; bumping it is a one-line edit, but doing so with intent matters
+because different upstream commits produce different binaries. The pin gives reproducibility within a deployment, not
+a guarantee that any specific tag stays available upstream forever.
+
+### A note on podman warnings
+
+Rootless podman prints a block of `can't raise ambient capability CAP_*: operation not permitted` warnings at the
+start of every `run` and `build`. They are harmless here. Podman is asking the kernel for capabilities its default
+profile would normally grant; the user namespace refuses, which is exactly what we want. The sandbox drops every
+capability anyway (`--cap-drop=ALL` in `sandbox/run.py`), so nothing in the pipeline relies on them. Silencing the
+warnings, if the noise bothers you, is a one-liner: set `default_capabilities = []` under `[containers]` in
+`~/.config/containers/containers.conf`.
+
+### A note on the stderr log
+
+`inference/runner.py` passes `--log-disable` to `llama-cli` so the assistant's reply is the only thing on stdout.
+The trade-off is that llama.cpp's own load and timing chatter no longer reaches the per-run stderr log under
+`.vulnforge/logs/`. Hard failures still surface: the dynamic linker and the kernel write to stderr regardless, and
+`infer()` raises on a non-zero exit. If load diagnostics matter for a session, swap `--log-disable` for
+`--log-file /dev/stderr` in `inference/runner.py`; that routes llama.cpp's logs back into the captured stderr while
+keeping stdout clean.
 
 ## Usage
 
@@ -86,7 +120,7 @@ The pytest version of the smoke test lives at `tests/test_plumbing.py` and skips
 pytest tests/test_plumbing.py -v
 ```
 
-## What is in place today
+## Done
 
 Infrastructure: real and runnable.
 
@@ -101,7 +135,7 @@ Stages: skeletal. `ingest` walks a repo into the store. `index`, `hypothesise`, 
 `report` raise `NotImplementedError`. The data flow and trust boundaries are wired in; what is missing is the analysis
 content.
 
-## A constraint worth restating
+## Another note
 
 If the AI layer judges, or the network is open, the system collapses into a confident fiction generator about security.
 The design is structural specifically because configuration is too easy to forget.

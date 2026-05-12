@@ -93,6 +93,7 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int) -> None:
     click.echo(f"weights:  {spec.alias} ({spec.dest})")
 
     click.echo("inference running inside sandbox...")
+    click.echo("stderr log: .vulnforge/logs/llama-*.log")
     result = infer(
         prompt=prompt,
         weights_path=spec.dest,

@@ -19,12 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
     && rm -rf /var/lib/apt/lists/*
 
-ARG LLAMA_TAG=b3850
+ARG LLAMA_TAG=b9116
 RUN git clone --depth 1 --branch ${LLAMA_TAG} \
         https://github.com/ggerganov/llama.cpp /tmp/llama.cpp \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DLLAMA_CURL=OFF \
     && cmake --build /tmp/llama.cpp/build --target llama-cli -j \
     && cp /tmp/llama.cpp/build/bin/llama-cli /usr/local/bin/llama-cli \
+    && find /tmp/llama.cpp/build -name '*.so*' -exec cp -a {} /usr/local/lib/ \; \
+    && ldconfig \
     && rm -rf /tmp/llama.cpp
 
 USER 65534:65534

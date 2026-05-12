@@ -34,6 +34,7 @@ def run(
     memory: str = "2g",
     cpus: str = "2",
     pids_limit: int = 256,
+    stderr_log_path: Path | None = None,
 ) -> Result:
     args: list[str] = [
         "podman", "run",
@@ -58,14 +59,35 @@ def run(
     args.append(image)
     args.extend(command)
 
-    try:
-        proc = subprocess.run(
-            args,
-            input=stdin,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-        return Result(proc.returncode, proc.stdout, proc.stderr, False)
-    except subprocess.TimeoutExpired as e:
-        return Result(124, e.stdout or b"", e.stderr or b"", True)
+    if stderr_log_path is None:
+        try:
+            proc = subprocess.run(
+                args,
+                input=stdin,
+                capture_output=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            return Result(proc.returncode, proc.stdout, proc.stderr, False)
+        except subprocess.TimeoutExpired as e:
+            return Result(124, e.stdout or b"", e.stderr or b"", True)
+
+    # stderr streamed straight to disk so a crash mid-run still leaves a trace.
+    stderr_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with stderr_log_path.open("wb+") as log_f:
+        try:
+            proc = subprocess.run(
+                args,
+                input=stdin,
+                stdout=subprocess.PIPE,
+                stderr=log_f,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            log_f.flush()
+            log_f.seek(0)
+            return Result(proc.returncode, proc.stdout, log_f.read(), False)
+        except subprocess.TimeoutExpired as e:
+            log_f.flush()
+            log_f.seek(0)
+            return Result(124, e.stdout or b"", log_f.read(), True)
