@@ -41,7 +41,7 @@ modules that touch the network. After `vulnforge bootstrap` runs once, the
 analysis host can be fully offline. The pipeline is structurally incapable of
 hitting the network because it never holds network code paths.
 
-## This session's decisions
+## May 13
 
 ### Workspace separation: immutable framework, mutable XDG
 
@@ -180,6 +180,12 @@ clean exit or a forced timeout.
 These are decisions we have not yet made. Listed so the next person reading
 this file knows where the live design questions are.
 
+- Verdict pipeline: a screening stage between hypothesise and execute, a
+  deterministic comparator in `stages/verify.py`, closed-enum failure
+  modes, and a `vulnforge stats` correlation surface. See
+  [verdict-pipeline.md](verdict-pipeline.md). Deferred until the first complete staged run
+  produces enough hypotheses per scan to make rule-writing cheaper than
+  rule-guessing.
 - `Run` vs `Workspace` separation: making workspaces own their containers and
   audit cursors. See `run-concept.md`. Deferred until a concrete trigger
   (concurrent scans, crash recovery, audit provenance) shows up.
