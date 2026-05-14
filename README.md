@@ -24,16 +24,14 @@ For installation, usage, repo layout, and architecture detail, see [README-techn
 
 For the load-bearing design decisions and the reasoning behind them, the design notes live in `docs/`:
 
-- [docs/design-choices.md](docs/design-choices.md): the load-bearing decisions and why they exist
-- [docs/trust-path.md](docs/trust-path.md): what the design removes from the trust path, and honestly, what it does not
-- [docs/verdict-pipeline.md](docs/verdict-pipeline.md): the plan for screening, verification, content addressing, and
-  the correlation loop
+- [docs/design-choices.md](docs/design-choices.md): load-bearing decisions and why they were made
+- [docs/trust-path.md](docs/trust-path.md): what this design removes from the trust path, and what it does not
+- [docs/verdict-pipeline.md](docs/verdict-pipeline.md): a plan for screening, verification, content addressing, and
+  a correlation loop
 - [docs/run-concept.md](docs/run-concept.md): open design forks (Run vs Workspace separation)
-
-Each document is short and each is honest about what it does and does not do.
 
 ## Architecture
 
 The conceptual frame is in [The model is not the system](https://broomstick.tymyrddin.dev/posts/model-is-not-system/).
 The short version: AI reasoning research is increasingly converging on arrangements of subsystems rather than single
-models. vulnforge is one worked example of that convergence, applied to vulnerability research.
+models. vulnforge is one worked example of that convergence, applied to vulnerability research, but with fewer models.
