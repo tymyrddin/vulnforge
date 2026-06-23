@@ -1,4 +1,4 @@
-# vulnforge
+# Vulnforge
 
 A tool that uses local AI models to look for security vulnerabilities in code, built so that the AI never decides on its
 own whether something is actually a vulnerability, and so that nothing the tool sees ever leaves the machine.
@@ -18,20 +18,16 @@ traced back to exactly what produced it.
 It runs on what you already have. Local open-source models on a normal workstation. No cloud bill, no vendor dependency,
 no API key.
 
-## Verifying claims
+## Docs
 
-For installation, usage, repo layout, and architecture detail, see [README-technical.md](README-technical.md).
+- For installation, usage, repo layout, and architecture detail, see [technical docs](docs/technical/README.md).
+- For the load-bearing design decisions and the reasoning behind them, see [the project's institutional memory](docs/memory/)
+- What we're building next can be found in the [roadmap](docs/roadmap.md)
 
-For the load-bearing design decisions and the reasoning behind them, the design notes live in `docs/`:
+## Context
 
-- [docs/design-choices.md](docs/design-choices.md): load-bearing decisions and why they were made
-- [docs/trust-path.md](docs/trust-path.md): what this design removes from the trust path, and what it does not
-- [docs/verdict-pipeline.md](docs/verdict-pipeline.md): a plan for screening, verification, content addressing, and
-  a correlation loop
-- [docs/run-concept.md](docs/run-concept.md): open design forks (Run vs Workspace separation)
+This is a PoC made in 2026 in the context of [The nuclear delusion](https://broomstick.tymyrddin.dev/posts/nuclear-delusion/) 
+The conceptual frame was made earlier and can be found in [The model is not the system](https://broomstick.tymyrddin.dev/posts/model-is-not-system/).
 
-## Architecture
-
-The conceptual frame is in [The model is not the system](https://broomstick.tymyrddin.dev/posts/model-is-not-system/).
 The short version: AI reasoning research is increasingly converging on arrangements of subsystems rather than single
 models. vulnforge is one worked example of that convergence, applied to vulnerability research, but with fewer models.

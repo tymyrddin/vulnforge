@@ -1,9 +1,6 @@
-# vulnforge (technical)
+# Contributing
 
 A vulnerability research pipeline built around a single rule: nothing is a vulnerability until execution says so.
-
-For a plain-language overview, see [README.md](README.md). For the conceptual frame,
-see [The model is not the system](https://broomstick.tymyrddin.dev/posts/model-is-not-system/).
 
 ## Architecture
 
@@ -17,7 +14,7 @@ ingest -> index -> hypothesise -> synthesise -> execute -> verify -> report
 Each stage reads its inputs from a content-addressed store, writes outputs back, and appends one event to a hash-chained
 audit log. Stages communicate by ref (a SHA256), not by in-process state. Any stage can be re-run independently.
 
-For the load-bearing decisions and why they exist, see [docs/design-choices.md](docs/design-choices.md).
+For the load-bearing decisions and why they exist, see [design-choices.md](../memory/design-choices.md).
 
 ## Trust boundaries
 
@@ -33,7 +30,7 @@ For the load-bearing decisions and why they exist, see [docs/design-choices.md](
 - The audit log is append-only and hash-chained. Each entry references the previous entry's hash; tampering is
   detectable in O(n) via `vulnforge audit-verify`.
 
-For what this design does and does not remove from the trust path, see [docs/trust-path.md](docs/trust-path.md).
+For what this design does and does not remove from the trust path, see [trust-path.md](../memory/trust-path.md).
 
 ## Repo layout
 
@@ -67,48 +64,6 @@ Runtime state lives outside the framework checkout under `$XDG_DATA_HOME/vulnfor
 
 Override via `--workspace <path>` or `$VULNFORGE_WORKSPACE`.
 
-## Requirements
-
-- Linux with rootless podman on PATH. Ubuntu 24.04 is the tested baseline.
-- x86_64 CPU with AVX2 (llama.cpp requirement).
-- Around 10 GiB free disk for weights, the built sandbox image, and the build cache.
-- 16 GiB RAM recommended. The default Qwen 7B inference runs in an 8 GiB cgroup (around 5 GiB resident); 16 GiB host RAM
-  leaves room for the desktop.
-- Network for the bootstrap step only. The analysis host can be offline afterwards.
-
-The cgroup caps live in `inference/runner.py` and `sandbox/run.py`, adjustable for the hardware in front of you.
-
-## Setup
-
-In an activated venv:
-
-```
-pip install -e .
-```
-
-## Usage
-
-```
-vulnforge bootstrap                       # fetch weights, build sandbox (online, one-off)
-vulnforge plumbing                        # end-to-end smoke test
-vulnforge scan path/to/repo               # run the staged pipeline (offline)
-vulnforge probe path/to/file              # one-shot hypothesis against a single file
-vulnforge audit-verify --workspace <dir>  # walk a run's audit log hash chain
-```
-
-`probe` bypasses the staged pipeline and is the fastest way to exercise the prompt and schema layer without the later
-stages. Each probe run writes per-failure-layer artefacts under the workspace root: `probe-prompt.txt`,
-`probe-output.txt`, `probe-extracted.txt`, `probe-parsed.json`, and (if any) `probe-rejections.jsonl`.
-
-## Tests
-
-```
-pytest tests/ -v
-```
-
-`test_plumbing.py` is the end-to-end inference smoke test. `test_sandbox_cleanup.py` asserts that no `vulnforge-*`
-containers survive a clean exit or a forced timeout. Both skip on hosts that have not bootstrapped.
-
 ## Status
 
 Infrastructure is real and runnable:
@@ -131,23 +86,8 @@ Stages: skeletal. `ingest` walks a repo into the store. `index`, `hypothesise`, 
 remains.
 
 For the planned verdict pipeline (screening, verification, content addressing, correlation),
-see [docs/verdict-pipeline.md](docs/verdict-pipeline.md). For open design questions (Run vs Workspace separation,
-concurrent scans, crash recovery), see [docs/run-concept.md](docs/run-concept.md).
-
-## Notes for operators
-
-Rootless podman prints `can't raise ambient capability CAP_*` warnings at the start of every `run` and `build`. They are
-harmless: the sandbox drops every capability anyway (`--cap-drop=ALL` in `sandbox/run.py`), so nothing in the pipeline
-relies on them. To silence, set `default_capabilities = []` under `[containers]` in
-`~/.config/containers/containers.conf`.
-
-`inference/runner.py` passes `--log-disable` to `llama-cli` so the assistant's reply is the only thing on stdout. Hard
-failures still surface: the dynamic linker and the kernel write to stderr regardless, and `infer()` raises on a non-zero
-exit. To see llama.cpp's own load and timing chatter for a probe run, pass `--debug-llama`; that flips the flag to
-`--log-file /dev/stderr` and the captured stderr log fills up.
-
-The `LLAMA_TAG` default in `sandbox/Containerfile` names a specific release tag. Bumping it is a one-line edit;
-different upstream commits produce different binaries, so pin with intent.
+see [verdict-pipeline.md](../memory/verdict-pipeline.md). For open design questions (Run vs Workspace separation,
+concurrent scans, crash recovery), see [run-concept.md](../memory/run-concept.md).
 
 ## Closing note
 
