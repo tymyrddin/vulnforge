@@ -57,6 +57,7 @@ Implementation:
 - AST parsing using Python's `ast` module
 - Extracts per function: name, parameters, return type, body source, decorators, calls, globals used, imports
 - Call graph: intra-file only (`callers` and `callees`)
+- Security facts extracted via `extractors.python.extract()` and added to every slice
 - Nested functions are skipped (would create slice ID collisions)
 - `_body()` includes the `def` line but not decorators
 - `_globals_used()` uses set intersection — O(n) on AST size
@@ -76,9 +77,12 @@ Slice format:
   "calls": ["str"],
   "globals_used": ["str"],
   "imports": ["str"],
-  "context": {"callers": ["str"], "callees": ["str"]}
+  "context": {"callers": ["str"], "callees": ["str"]},
+  "security_facts": [{"type": "str", ...}]
 }
 ```
+
+`security_facts` is always a list (empty `[]` when nothing found, never absent). See `extractors/` below.
 
 ### Hypothesise (`hypothesise.py`)
 
@@ -94,6 +98,17 @@ Implementation:
 - `model_hash` in audit uses `spec.sha256` from lock file (always available even if all slices fail)
 - Invalid model output (missing fields, wrong types) is silently discarded
 - Only produces `Status.PROPOSED` via `Hypothesis.propose()`
+
+`_format_slice()` renders the slice dict as a `# File: / # Function: / ...` header block. Security facts
+are rendered at the end of the header via `_render_fact()`:
+
+```
+# Security facts:
+#   subprocess(shell=default_false, argv=unknown)
+#   file write: path from parameter:stderr_log_path
+```
+
+`_render_fact()` is a pure formatting helper; it does not interpret or judge facts.
 
 State transition:
 
@@ -234,6 +249,44 @@ Summary: 3 confirmed, 2 refuted, 0 skipped
 - Provenance: ...
 ```
 
+## Security fact extractor (`extractors/`)
+
+Two-file package. `__init__.py` defines the shared type alias; `python.py` does the AST work.
+
+```
+extractors/
+  __init__.py   # SecurityFact = dict[str, Any]; schema docstring only
+  python.py     # extract(node) -> list[SecurityFact]
+```
+
+`extract()` runs four sub-walkers over the function AST:
+
+| Sub-walker | Detects | Fact type |
+|---|---|---|
+| Subprocess | `subprocess.run/call/check_output/check_call/Popen`, `os.system`, `os.popen` | `subprocess` |
+| File path | `open()`, `.open()`, `.write_text/bytes()`, `.read_text/bytes()` | `file_write` / `file_read` |
+| Dangerous sink | `eval`, `exec`, `compile`, `pickle.loads`, `yaml.load`, `marshal.loads`, `os.system`, `os.popen`, `subprocess.*(shell=True)` | `dangerous_sink` |
+| Environment access | `os.getenv()`, `os.environ[]`, `os.environ.get()`, `environ.get()` | `environment_access` |
+
+Fact schema:
+
+```
+{"type": "subprocess",        "shell": True|False|"default_false"|"unknown", "argv_style": "list"|"string"|"unknown"}
+{"type": "file_write",        "path_source": "parameter:NAME"|"constant"|"unknown"}
+{"type": "file_read",         "path_source": "parameter:NAME"|"constant"|"unknown"}
+{"type": "dangerous_sink",    "name": str}
+{"type": "environment_access","call": "os.getenv"|"os.environ[]"|"os.environ.get"|"environ.get"}
+```
+
+`shell` semantics:
+- `True`/`False` — explicit boolean constant in source
+- `"default_false"` — `shell` kwarg absent; relies on stdlib default (weaker than explicit `False`)
+- `"unknown"` — dynamic expression; static analysis cannot resolve
+
+`"unknown"` is the honest value when the extractor hits a static analysis limit. It is not the same as absence of a fact.
+
+Future languages: add `extractors/javascript.py` (same return type); wire into `stages/index.py`'s existing per-extension dispatch. No changes to `extractors/__init__.py` needed.
+
 ## Inference runner (`inference/runner.py`)
 
 Purpose: llama.cpp subprocess wrapper. Inference runs inside the canonical sandbox.
@@ -372,6 +425,7 @@ Each scan creates a fresh timestamped run directory under `runs/` within that ro
 | Test                      | Status    | Tests | Time  |
 |---------------------------|-----------|-------|-------|
 | `test_cve.py`             | Passing   | 5     | <1s   |
+| `test_extractors.py`      | Passing   | 19    | <1s   |
 | `test_pipeline.py`        | Passing   | 12    | ~90s  |
 | `test_plumbing.py`        | Passing   | 1     | ~10s  |
 | `test_sandbox_cleanup.py` | Passing   | 2     | ~2s   |
@@ -433,7 +487,8 @@ Total (qwen3-8b + qwen2.5-7b): ~2-3 minutes for small codebases
 
 ## Open items
 
-- Multi-language support: extend `index.py` to JavaScript, Go, Rust via tree-sitter.
+- Prompt rule 12 effectiveness: rule 12 in `hypothesise.txt` instructs the model to use security facts to rule out impossible attack classes (e.g. `shell=default_false` → no shell metacharacter injection). Effectiveness not yet confirmed by a second probe run.
+- Multi-language support: add `extractors/javascript.py` (same `list[SecurityFact]` return type); wire into `stages/index.py`'s per-extension dispatch. No other changes needed.
 - Payload dispatch: the `category` field from synthesise (`input_string`, `fuzz_seed`, `request_sequence`) is not yet used by `execute._run_payload()`.
 - Marker injection for additional attack types: `command_injection` is covered; `code_execution` needs Python-syntax marker embedding (e.g. `; print('MARKER')` inside eval targets).
 - CVE model fallback: when the offline DB has no match for a confirmed finding, fall back to plumbing-check for ambiguous linking. Not yet implemented.

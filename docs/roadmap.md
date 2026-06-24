@@ -80,33 +80,16 @@ suggested_inputs quality is still inconsistent across slice types.
 
 ### Security fact extraction in slices
 
-The model cannot reliably infer the difference between `subprocess.run(args_list,
-shell=False)` and `subprocess.run(user_string, shell=True)` from source text. That
-distinction is the entire difference between a real command injection and a false one.
+Implemented. `extractors/python.py` runs four AST sub-walkers (subprocess, file path,
+dangerous sink, environment access) and adds a `security_facts` list to every slice.
+`_format_slice()` in `hypothesise.py` renders the facts as `# Security facts:` header
+lines so the model sees them as stated ground truth, not something to infer from code.
 
-Static analysis can extract these facts cheaply and inject them into the slice:
+Prompt rule 12 in `hypothesise.txt` instructs the model to treat `shell=False` /
+`shell=default_false` as ruling out shell-metacharacter injection. Effectiveness
+confirmed for "Arbitrary File Write" (new hypothesis driven by the file-write fact);
+command injection suppression is pending a second probe run post-rule-12 addition.
 
-```json
-{
-  "subprocess_calls": [{"shell": false, "argv_style": true}],
-  "security_facts": [
-    "subprocess.run called with shell=False",
-    "command passed as argv list, not string"
-  ]
-}
-```
-
-The model then reasons over extracted facts rather than inferring them from code.
-This aligns with the core architecture: code extracts facts, model reasons over facts.
-The same principle that makes `execute` and `verify` reliable (code decides, not model)
-applies to the hypothesise input: the stronger the extracted context, the less the
-model has to guess.
-
-Candidates for extraction in `stages/index.py`: subprocess shell mode, file open
-modes, path validation presence, use of `shlex`, SQL string interpolation patterns,
-pickle/yaml/json.loads calls on external input.
-
-Trigger for implementation: when slice-based probe still produces systematically
-wrong hypotheses for a class of functions (e.g. all subprocess wrappers), and the
-pattern is attributable to a missing fact rather than a prompt issue.
+Future languages: add `extractors/javascript.py` with the same `list[SecurityFact]`
+return type; wire into `stages/index.py`'s per-extension dispatch. No other changes.
 
