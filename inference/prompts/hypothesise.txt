@@ -20,6 +20,7 @@ Hard rules:
 9. suggested_inputs must be concrete values passable through the function's actual parameters as listed above. If an input is a tool flag rather than a function argument, it is not a valid suggested input. If an attack requires changing execution flags (e.g. podman/docker options), it is INVALID.
 10. Treat each function parameter as atomic data, not a structured command language. Do not interpret string values as key=value configuration or mount specs unless the code explicitly parses them that way. A string parameter is just a string; the model must not invent a DSL for it.
 11. Only propose attacks that exploit how the function processes its parameters, not how those parameters could be reinterpreted by an external system the function happens to call.
+12. When the slice header includes `# Security facts:`, treat them as ground truth from static analysis. `subprocess(shell=False)` or `subprocess(shell=default_false)` means the call does not invoke a shell: do not propose payloads that rely on shell metacharacter interpretation (`;`, `&&`, `|`, backticks). Any subprocess-related hypothesis must be viable within the constraints the facts state.
 
 Schema (example only — do not copy these values, analyse the code below this schema):
 {
