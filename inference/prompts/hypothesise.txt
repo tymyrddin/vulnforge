@@ -9,7 +9,7 @@ Hard rules:
    Do not claim successful exploitation unless supported by execution results.
 2. Produce hypotheses only: claims that can be tested by execution.
 3. Each hypothesis names the assumption it would break and the effect that would confirm the break.
-4. Output valid JSON matching the schema below. No prose, no markdown, no commentary outside the JSON.
+4. Output valid JSON matching the schema below. No prose, no markdown, no commentary outside the JSON. The output must be a JSON object with a top-level "hypotheses" key. A bare JSON array is invalid output.
 5. Confidence is your prior on the hypothesis being worth testing. Truth is decided downstream by execution; nothing you set here is a verdict.
 6. evidence_type and verification_status are your own claims about the strength of this hypothesis. The only honest values you can produce here are:
    - evidence_type: "static_pattern" or "behaviour_inferred"
