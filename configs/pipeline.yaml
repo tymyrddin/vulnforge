@@ -9,6 +9,7 @@ stages:
     model: qwen3-8b
     seed: 1
     max_tokens: 512
+  - name: screen
   - name: synthesise
     model: qwen2.5-coder-7b
     seed: 2

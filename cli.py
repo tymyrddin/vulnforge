@@ -215,13 +215,13 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
       probe-extracted.txt / probe-<fn>-extracted.txt
       probe-parsed.json / probe-<fn>-parsed.json
       probe-rejections.jsonl / probe-<fn>-rejections.jsonl (only if any)
+      probe-screen.jsonl / probe-<fn>-screen.jsonl (grounding per hypothesis)
     """
     import ast
     import json
 
     from bootstrap import build_sandbox, fetch_models
     from inference.runner import infer
-    from schema.hypothesis import EvidenceType, Hypothesis, VerificationStatus
     from stages.hypothesise import _format_slice
     from stages.index import _index_file
 
@@ -266,7 +266,10 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
                 f"available: {', '.join(available) or '(none)'}"
             )
         _slice_id, slice_data = next(iter(matches.items()))
-        to_probe = [(_format_slice(slice_data), f"{source}::{function_name}", "probe")]
+        to_probe = [(
+            _format_slice(slice_data), f"{source}::{function_name}", "probe",
+            slice_data.get("security_facts", []), slice_data.get("imports", []),
+        )]
     else:
         try:
             tree = ast.parse(source_text, filename=str(source))
@@ -277,15 +280,21 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             pairs = sorted(all_slices.items())
             if len(pairs) == 1:
                 _sid, sd = pairs[0]
-                to_probe = [(_format_slice(sd), f"{source}::{sd['function_name']}", "probe")]
+                to_probe = [(
+                    _format_slice(sd), f"{source}::{sd['function_name']}", "probe",
+                    sd.get("security_facts", []), sd.get("imports", []),
+                )]
             else:
                 to_probe = [
-                    (_format_slice(sd), f"{source}::{sd['function_name']}", f"probe-{sd['function_name']}")
+                    (
+                        _format_slice(sd), f"{source}::{sd['function_name']}", f"probe-{sd['function_name']}",
+                        sd.get("security_facts", []), sd.get("imports", []),
+                    )
                     for _sid, sd in pairs
                 ]
         else:
             raw_fallback = True
-            to_probe = [(source_text, str(source), "probe")]
+            to_probe = [(source_text, str(source), "probe", [], [])]
 
     ws.root.mkdir(parents=True, exist_ok=True)
     multi = len(to_probe) > 1
@@ -298,8 +307,9 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
 
     total_accepted = 0
     total_rejected_count = 0
+    total_screen_kept = 0
 
-    for code_context, fn_label, artefact_prefix in to_probe:
+    for code_context, fn_label, artefact_prefix, facts, imports in to_probe:
         prompt = (
             f"{prompt_template}{code_context}"
             if raw_fallback
@@ -375,32 +385,32 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             raise click.ClickException("'hypotheses' is not a list")
 
         click.echo("=== parsed hypotheses ===")
-        rejections: list[dict] = []
-        accepted = 0
-        for i, item in enumerate(data["hypotheses"]):
-            try:
-                h = Hypothesis.propose(
-                    attack_type=item["attack_type"],
-                    location=item["location"],
-                    assumption_broken=item["assumption_broken"],
-                    expected_effect=item["expected_effect"],
-                    suggested_inputs=item.get("suggested_inputs", []),
-                    confidence=float(item["confidence"]),
-                    model_hash=result.weights_hash,
-                    evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
-                    verification_status=VerificationStatus(
-                        item.get("verification_status", "unverified")
-                    ),
+        # The same grounding gate the scan pipeline applies, run here so the probe
+        # shows whether a schema-valid hypothesis is actually grounded in the slice's
+        # facts. Code decides; this is not the model judging itself.
+        outcomes, accepted, screen_kept = _screen_probe_hypotheses(
+            data["hypotheses"], facts, imports, result.weights_hash
+        )
+        rejections = [
+            {"index": o["index"], "raw": o["raw"], "rejection": o["rejection"]}
+            for o in outcomes if o["kind"] == "rejected"
+        ]
+        screen_records = [
+            {k: v for k, v in o.items() if k not in ("kind", "raw")}
+            for o in outcomes if o["kind"] == "screened"
+        ]
+        for o in outcomes:
+            if o["kind"] == "rejected":
+                click.echo(f"  [{o['index']}] rejected {o['rejection']}")
+            else:
+                click.echo(
+                    f"  [{o['index']}] ok       {o['attack_type']} @ {o['location']} "
+                    f"(conf={o['model_confidence']:.2f}, {o['evidence_type']})"
                 )
                 click.echo(
-                    f"  [{i}] ok       {h.attack_type} @ {h.location} "
-                    f"(conf={h.confidence:.2f}, {h.evidence_type.value})"
+                    f"         screen {'keep' if o['kept'] else 'drop'}: {o['grounding']} "
+                    f"[{o['screen_reason']}] eff_conf={o['effective_confidence']}"
                 )
-                accepted += 1
-            except (KeyError, TypeError, ValueError) as e:
-                reason = f"{type(e).__name__}: {e}"
-                click.echo(f"  [{i}] rejected {reason}")
-                rejections.append({"index": i, "raw": item, "rejection": reason})
 
         if rejections:
             rejections_path = ws.root / f"{artefact_prefix}-rejections.jsonl"
@@ -410,19 +420,97 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             if not multi:
                 click.echo(f"rejected: {rejections_path}")
 
+        if screen_records:
+            screen_path = ws.root / f"{artefact_prefix}-screen.jsonl"
+            with screen_path.open("w") as f:
+                for r in screen_records:
+                    f.write(json.dumps(r, sort_keys=True) + "\n")
+            if not multi:
+                click.echo(f"screen:   {screen_path}")
+
         total_accepted += accepted
         total_rejected_count += len(rejections)
+        total_screen_kept += screen_kept
         if multi:
-            click.echo(f"  {accepted} accepted, {len(rejections)} rejected")
+            click.echo(
+                f"  {accepted} schema-accepted, {len(rejections)} schema-rejected; "
+                f"screen kept {screen_kept}, dropped {accepted - screen_kept}"
+            )
 
     click.echo()
+    total_dropped = total_accepted - total_screen_kept
     if multi:
         click.echo(
-            f"total:    {total_accepted} accepted, {total_rejected_count} rejected "
-            f"across {len(to_probe)} functions"
+            f"total:    {total_accepted} schema-accepted, {total_rejected_count} schema-rejected "
+            f"across {len(to_probe)} functions; screen kept {total_screen_kept}, dropped {total_dropped}"
         )
     else:
-        click.echo(f"summary:  {total_accepted} accepted, {total_rejected_count} rejected")
+        click.echo(
+            f"summary:  {total_accepted} schema-accepted, {total_rejected_count} schema-rejected; "
+            f"screen kept {total_screen_kept}, dropped {total_dropped}"
+        )
+
+
+def _screen_probe_hypotheses(
+    hypotheses: list, facts: list, imports: list, model_hash: str
+) -> tuple[list[dict], int, int]:
+    """Schema-validate then taint-ground each raw model hypothesis dict.
+
+    Pure: no model, no sandbox, no IO. Returns (outcomes, accepted, screen_kept).
+    Each outcome is either {"kind": "rejected", index, raw, rejection} when the
+    schema gate refuses the hypothesis, or {"kind": "screened", index, attack_type,
+    location, evidence_type, model_confidence, grounding, screen_reason,
+    effective_confidence, kept} when it passes the schema gate and the grounding gate
+    runs. The two gates layer: schema validity first, grounding second.
+    """
+    from schema.hypothesis import EvidenceType, Hypothesis, VerificationStatus
+    from schema.screen import decide_policy
+    from stages.screen import _grounding
+
+    outcomes: list[dict] = []
+    accepted = 0
+    screen_kept = 0
+    for i, item in enumerate(hypotheses):
+        try:
+            h = Hypothesis.propose(
+                attack_type=item["attack_type"],
+                location=item["location"],
+                assumption_broken=item["assumption_broken"],
+                expected_effect=item["expected_effect"],
+                suggested_inputs=item.get("suggested_inputs", []),
+                confidence=float(item["confidence"]),
+                model_hash=model_hash,
+                evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
+                verification_status=VerificationStatus(
+                    item.get("verification_status", "unverified")
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            outcomes.append({
+                "kind": "rejected",
+                "index": i,
+                "raw": item,
+                "rejection": f"{type(e).__name__}: {e}",
+            })
+            continue
+
+        accepted += 1
+        grounding, screen_reason = _grounding(item, facts, imports)
+        kept, eff_conf = decide_policy(grounding, h.confidence)
+        screen_kept += 1 if kept else 0
+        outcomes.append({
+            "kind": "screened",
+            "index": i,
+            "attack_type": h.attack_type,
+            "location": h.location,
+            "evidence_type": h.evidence_type.value,
+            "model_confidence": h.confidence,
+            "grounding": grounding.value,
+            "screen_reason": screen_reason.value,
+            "effective_confidence": eff_conf,
+            "kept": kept,
+        })
+    return outcomes, accepted, screen_kept
 
 
 if __name__ == "__main__":

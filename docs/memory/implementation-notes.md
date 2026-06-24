@@ -271,21 +271,37 @@ extractors/
 Fact schema:
 
 ```
-{"type": "subprocess",        "shell": True|False|"default_false"|"unknown", "argv_style": "list"|"string"|"unknown"}
-{"type": "file_write",        "path_source": "parameter:NAME"|"constant"|"unknown"}
-{"type": "file_read",         "path_source": "parameter:NAME"|"constant"|"unknown"}
-{"type": "dangerous_sink",    "name": str}
+{"type": "subprocess",        "shell": True|False|"default_false"|"unknown", "argv_style": "list"|"string"|"unknown", "arg_source": ARG_SOURCE}
+{"type": "file_write",        "path_source": ARG_SOURCE}
+{"type": "file_read",         "path_source": ARG_SOURCE}
+{"type": "dangerous_sink",    "name": str, "arg_source": ARG_SOURCE}
 {"type": "environment_access","call": "os.getenv"|"os.environ[]"|"os.environ.get"|"environ.get"}
 ```
 
 `shell` semantics:
-- `True`/`False` — explicit boolean constant in source
-- `"default_false"` — `shell` kwarg absent; relies on stdlib default (weaker than explicit `False`)
-- `"unknown"` — dynamic expression; static analysis cannot resolve
+- `True`/`False`: explicit boolean constant in source
+- `"default_false"`: `shell` kwarg absent; relies on stdlib default (weaker than explicit `False`)
+- `"unknown"`: dynamic expression; static analysis cannot resolve
 
-`"unknown"` is the honest value when the extractor hits a static analysis limit. It is not the same as absence of a fact.
+`ARG_SOURCE` is the provenance of the value reaching the sink, computed by the shared `_classify_arg` helper:
+- `"parameter:NAME"`: a bare parameter, direct identity
+- `"parameter-derived"`: a parameter flows in via f-string interpolation or as a collection element
+- `"constant"`: a literal; no parameter can reach it
+- `"unknown"`: a helper call, a local, or anything the single-function pass cannot follow
+
+`"unknown"` is the honest value when the extractor hits a static analysis limit. It is not the same as absence of a fact, and it is not the same as `"constant"`: a value the pass cannot follow is not proof the attacker has no influence over it. The screen stage relies on exactly this distinction.
 
 Future languages: add `extractors/javascript.py` (same return type); wire into `stages/index.py`'s existing per-extension dispatch. No changes to `extractors/__init__.py` needed.
+
+## Screen stage (`stages/screen.py`)
+
+Sits between hypothesise and synthesise. Grounds each hypothesis against the slice's security facts, in code, before any payload is synthesised or executed. The deterministic answer to static-pattern enthusiasm: the model proposes attack classes by recall, the screen checks whether a parameter actually reaches a sink of the right kind.
+
+`run(hypotheses_ref, slices_ref) -> (accepted_ref, screen_verdicts_ref)`. A hypothesis is mapped back to its slice by id (`<slice_id>::<idx>`, so the slice id is the id with its last segment stripped). The accepted ref is a hypothesis manifest of the same shape hypothesise emits, so synthesise consumes it with no signature change; the orchestrator feeds `screen_accepted_latest` to synthesise when the screen has run.
+
+Grounding (`schema/screen.py`, `Grounding` enum): `grounded` (parameter reaches a matching sink, accept at full confidence), `unknown` (matching sink, provenance unresolved, accept but cap confidence at `UNKNOWN_CONFIDENCE_CAP` = 0.35), `contradicted` (facts rule the mechanism out, reject), `unsupported` (no matching sink, reject). `decide_policy()` maps a state to (accepted, effective_confidence); the cap is a policy constant, not a calibrated value, and the only property that matters is that unknown ranks below grounded.
+
+Two pure functions carry the logic: `_grounding(hyp, facts, imports)` computes the state from an attack-class predicate table plus `arg_source`, resolving multiple matching sinks by precedence (grounded > unknown > contradicted > unsupported); `decide_policy` applies the cap. Verdicts for rejected hypotheses are stored too, not discarded, so a later run can ask how many unknown findings ever verify.
 
 ## Inference runner (`inference/runner.py`)
 
@@ -425,8 +441,10 @@ Each scan creates a fresh timestamped run directory under `runs/` within that ro
 | Test                      | Status    | Tests | Time  |
 |---------------------------|-----------|-------|-------|
 | `test_cve.py`             | Passing   | 5     | <1s   |
-| `test_extractors.py`      | Passing   | 19    | <1s   |
-| `test_pipeline.py`        | Passing   | 12    | ~90s  |
+| `test_extractors.py`      | Passing   | 27    | <1s   |
+| `test_screen.py`          | Passing   | 16    | <1s   |
+| `test_probe_screen.py`    | Passing   | 5     | <1s   |
+| `test_pipeline.py`        | Passing   | 13    | ~90s  |
 | `test_plumbing.py`        | Passing   | 1     | ~10s  |
 | `test_sandbox_cleanup.py` | Passing   | 2     | ~2s   |
 
@@ -487,9 +505,9 @@ Total (qwen3-8b + qwen2.5-7b): ~2-3 minutes for small codebases
 
 ## Open items
 
-- Prompt rule 12 effectiveness: rule 12 in `hypothesise.txt` instructs the model to use security facts to rule out impossible attack classes (e.g. `shell=default_false` → no shell metacharacter injection). Effectiveness not yet confirmed by a second probe run.
-- Multi-language support: add `extractors/javascript.py` (same `list[SecurityFact]` return type); wire into `stages/index.py`'s per-extension dispatch. No other changes needed.
+- Screen grounding effectiveness: the screen now grounds attack classes in code via `arg_source` rather than relying on the model to honour rule 12 in the prompt. Rule 12 stays as a cheap upstream nudge. Grounding versus unknown verify rates want measuring across a few real runs: if unknown findings almost never verify, the policy can tighten; if some confirmed findings come from the unknown bucket, the penalty stays. This is the empirical path the four-state model keeps open.
+- Multi-language support: add `extractors/javascript.py` (same `list[SecurityFact]` return type, including `arg_source`); wire into `stages/index.py`'s per-extension dispatch. No other changes needed.
 - Payload dispatch: the `category` field from synthesise (`input_string`, `fuzz_seed`, `request_sequence`) is not yet used by `execute._run_payload()`.
 - Marker injection for additional attack types: `command_injection` is covered; `code_execution` needs Python-syntax marker embedding (e.g. `; print('MARKER')` inside eval targets).
 - CVE model fallback: when the offline DB has no match for a confirmed finding, fall back to plumbing-check for ambiguous linking. Not yet implemented.
-- Screening stage: pre-execution filter for structurally invalid hypotheses. See `verdict-pipeline.md`.
+- Screening stage: landed as a taint-grounding gate (`stages/screen.py`). The location-resolution, payload-syntax, and reachability checks from the original `verdict-pipeline.md` sketch are not yet built; they can follow as the attack-type predicate table grows.

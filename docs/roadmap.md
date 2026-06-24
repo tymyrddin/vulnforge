@@ -13,7 +13,7 @@ Three phases: solidify the core, expand capabilities and integration, then deepe
 | 1.5. Write comprehensive tests | ✅ Complete | `test_sandbox_cleanup.py`, `test_plumbing.py`, `test_pipeline.py` all passing. 11 tests including harness unit tests; pipeline end-to-end runs in ~73s.                           |
 | 1.6. Inference runner          | ✅ Complete | `inference/runner.py` with llama-cli wrapper, sandbox execution, stdout cleanup (ANSI, backspaces, timings).                                                                      |
 | 1.7. Prompt files              | ✅ Complete | `inference/prompts/hypothesise.txt` and `seed_payloads.txt` written, enforce "model proposes, code decides" principle.                                                            |
-| 1.8. Orchestrator wiring       | ✅ Complete | All 7 stages wired into `orchestrator/pipeline.py`. `vulnforge scan <repo>` runs the full pipeline.                                                                               |
+| 1.8. Orchestrator wiring       | ✅ Complete | All 8 stages wired into `orchestrator/pipeline.py` (the screen stage sits between hypothesise and synthesise). `vulnforge scan <repo>` runs the full pipeline.                     |
 
 ### Phase 2: Feature Expansion and Integration
 
@@ -85,11 +85,20 @@ dangerous sink, environment access) and adds a `security_facts` list to every sl
 `_format_slice()` in `hypothesise.py` renders the facts as `# Security facts:` header
 lines so the model sees them as stated ground truth, not something to infer from code.
 
-Prompt rule 12 in `hypothesise.txt` instructs the model to treat `shell=False` /
-`shell=default_false` as ruling out shell-metacharacter injection. Effectiveness
-confirmed for "Arbitrary File Write" (new hypothesis driven by the file-write fact);
-command injection suppression is pending a second probe run post-rule-12 addition.
+Each subprocess and dangerous-sink fact also carries an `arg_source`: the provenance
+of the value reaching the sink (`parameter:NAME`, `parameter-derived`, `constant`,
+`unknown`). This is the source-to-sink link a reviewer found missing: facts about a
+sink are not the same as evidence that attacker-controlled data reaches it.
+
+That link is now made consequential in code by the screen stage (`stages/screen.py`),
+between hypothesise and synthesise. It grounds each hypothesis against the slice facts:
+a parameter reaching a matching sink is grounded; a matching sink with unresolved
+provenance is unknown (kept, confidence capped); a mechanism the facts rule out is
+contradicted (rejected); no matching sink is unsupported (rejected). Acceptance and
+confidence depend on the computed grounding, not on the model honouring a prompt rule.
+Prompt rule 12 stays as a cheap upstream nudge.
 
 Future languages: add `extractors/javascript.py` with the same `list[SecurityFact]`
-return type; wire into `stages/index.py`'s per-extension dispatch. No other changes.
+return type (including `arg_source`); wire into `stages/index.py`'s per-extension
+dispatch. No other changes.
 

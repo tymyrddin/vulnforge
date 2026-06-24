@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from bootstrap import build_sandbox
-from stages import execute, hypothesise, index, ingest, report, synthesise, verify
+from stages import execute, hypothesise, index, ingest, report, screen, synthesise, verify
 from store import objects
 from workspace import new_run, use as use_workspace
 
@@ -154,6 +154,77 @@ def test_parse_hypotheses_invalid_evidence_type_skipped():
     result = _parse_hypotheses(output, "app.py::mixed", "deadbeef")
     assert len(result) == 1, f"expected 1 (bad enum dropped), got {len(result)}"
     assert result[0].attack_type == "path_traversal"
+
+
+# ---------------------------------------------------------------------------
+# Screen stage: deterministic grounding, no model or sandbox
+# ---------------------------------------------------------------------------
+
+def _put_slice(facts, imports):
+    blob = json.dumps(
+        {"security_facts": facts, "imports": imports},
+        sort_keys=True, separators=(",", ":"),
+    ).encode()
+    return objects.put(blob)
+
+
+def _put_hyp(attack_type, inputs, confidence):
+    blob = json.dumps(
+        {"attack_type": attack_type, "suggested_inputs": inputs, "confidence": confidence},
+        sort_keys=True, separators=(",", ":"),
+    ).encode()
+    return objects.put(blob)
+
+
+def test_screen_rejects_contradicted_keeps_unknown_capped() -> None:
+    """A contradicted hypothesis is rejected before synthesise; an unknown one
+    survives at a capped prior. The screen runs purely on stored facts, no sandbox."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        use_workspace(new_run(base=Path(tmpdir)))
+
+        # Slice with a single shell-off sink: a metacharacter payload cannot work, so
+        # the only matching sink contradicts the mechanism.
+        cleanup_id = "app.py::cleanup"
+        cleanup_ref = _put_slice(
+            facts=[{"type": "subprocess", "shell": False, "argv_style": "list", "arg_source": "constant"}],
+            imports=["import subprocess"],
+        )
+        # Slice with a single sink whose argument the AST cannot follow.
+        run_id = "app.py::run"
+        run_ref = _put_slice(
+            facts=[{"type": "subprocess", "shell": "unknown", "argv_style": "unknown", "arg_source": "unknown"}],
+            imports=["import subprocess"],
+        )
+        slices_ref = objects.put(
+            json.dumps({cleanup_id: cleanup_ref, run_id: run_ref}, sort_keys=True, separators=(",", ":")).encode()
+        )
+
+        contradicted_id = f"{cleanup_id}::0"
+        unknown_id = f"{run_id}::0"
+        hyp_manifest = {
+            contradicted_id: _put_hyp("command_injection", ["; rm -rf /"], 0.9),
+            unknown_id: _put_hyp("command_injection", ["whoami"], 0.9),
+        }
+        hypotheses_ref = objects.put(
+            json.dumps(hyp_manifest, sort_keys=True, separators=(",", ":")).encode()
+        )
+
+        accepted_ref, verdicts_ref = screen.run(hypotheses_ref, slices_ref)
+        accepted = json.loads(objects.get(accepted_ref))
+        verdicts = {
+            hid: json.loads(objects.get(ref))
+            for hid, ref in json.loads(objects.get(verdicts_ref)).items()
+        }
+
+        # The metacharacter hypothesis is contradicted (constant sink + shell off) and
+        # never reaches the accepted set.
+        assert contradicted_id not in accepted
+        assert verdicts[contradicted_id]["grounding"] == "contradicted"
+
+        # The unknown-provenance hypothesis survives, but its confidence is capped.
+        assert unknown_id in accepted
+        assert verdicts[unknown_id]["grounding"] == "unknown"
+        assert verdicts[unknown_id]["effective_confidence"] == 0.35
 
 
 # ---------------------------------------------------------------------------

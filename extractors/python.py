@@ -41,9 +41,9 @@ _ENV_CALL_FUNCS = frozenset({
 def extract(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[SecurityFact]:
     param_names = _param_names(node)
     facts: list[SecurityFact] = []
-    facts.extend(_subprocess_facts(node))
+    facts.extend(_subprocess_facts(node, param_names))
     facts.extend(_file_path_facts(node, param_names))
-    facts.extend(_dangerous_sink_facts(node))
+    facts.extend(_dangerous_sink_facts(node, param_names))
     facts.extend(_environment_access_facts(node))
     return facts
 
@@ -59,9 +59,11 @@ def _param_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     return names
 
 
-def _subprocess_facts(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[SecurityFact]:
+def _subprocess_facts(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, param_names: set[str]
+) -> list[SecurityFact]:
     facts: list[SecurityFact] = []
-    seen: set[tuple[Any, str]] = set()
+    seen: set[tuple[Any, str, str]] = set()
 
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
@@ -70,10 +72,14 @@ def _subprocess_facts(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[Secu
         func_name = ast.unparse(child.func)
 
         if func_name in _OS_SHELL_FUNCS:
-            key: tuple[Any, str] = (True, "string")
+            arg_source = _classify_arg(child.args[0], param_names) if child.args else "unknown"
+            key: tuple[Any, str, str] = (True, "string", arg_source)
             if key not in seen:
                 seen.add(key)
-                facts.append({"type": "subprocess", "shell": True, "argv_style": "string"})
+                facts.append({
+                    "type": "subprocess", "shell": True,
+                    "argv_style": "string", "arg_source": arg_source,
+                })
             continue
 
         if func_name not in _SUBPROCESS_FUNCS:
@@ -97,23 +103,67 @@ def _subprocess_facts(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[Secu
                 argv_style = "string"
             else:
                 argv_style = "unknown"
+            arg_source = _classify_arg(first, param_names)
         else:
             argv_style = "unknown"
+            arg_source = "unknown"
 
-        key = (shell, argv_style)
+        key = (shell, argv_style, arg_source)
         if key not in seen:
             seen.add(key)
-            facts.append({"type": "subprocess", "shell": shell, "argv_style": argv_style})
+            facts.append({
+                "type": "subprocess", "shell": shell,
+                "argv_style": argv_style, "arg_source": arg_source,
+            })
 
     return facts
 
 
-def _classify_path(node: ast.expr, param_names: set[str]) -> str:
-    if isinstance(node, ast.Name) and node.id in param_names:
-        return f"parameter:{node.id}"
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return "constant"
+def _classify_arg(node: ast.expr, param_names: set[str]) -> str:
+    """Provenance of a value reaching a sink, as far as a single-function AST pass
+    can tell. Honest about its own limits: a value it cannot follow is "unknown",
+    never "constant". "unknown" means analysis stopped, not that the attacker has no
+    influence.
+
+      parameter:NAME      bare parameter, direct identity
+      parameter-derived   parameter flows in via interpolation or a collection element
+      constant            literal, no parameter can reach it
+      unknown             a helper call, a local, or anything else this pass cannot follow
+    """
+    if isinstance(node, ast.Name):
+        return f"parameter:{node.id}" if node.id in param_names else "unknown"
+    if isinstance(node, ast.Constant):
+        return "constant" if isinstance(node.value, str) else "unknown"
+    if isinstance(node, ast.Starred):
+        return _classify_arg(node.value, param_names)
+    if isinstance(node, ast.JoinedStr):
+        # An f-string is parameter-derived when any interpolated value is a parameter.
+        for value in node.values:
+            if isinstance(value, ast.FormattedValue) and _reaches_parameter(value.value, param_names):
+                return "parameter-derived"
+        return "constant" if node.values and all(isinstance(v, ast.Constant) for v in node.values) else "unknown"
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return _aggregate_arg([_classify_arg(e, param_names) for e in node.elts])
     return "unknown"
+
+
+def _reaches_parameter(node: ast.expr, param_names: set[str]) -> bool:
+    return any(
+        isinstance(child, ast.Name) and child.id in param_names
+        for child in ast.walk(node)
+    )
+
+
+def _aggregate_arg(sources: list[str]) -> str:
+    """Provenance of a collection: take the strongest claim across elements, so a
+    single attacker-reachable element is not masked by neighbouring constants."""
+    if any(s.startswith("parameter:") for s in sources):
+        return next(s for s in sources if s.startswith("parameter:"))
+    if "parameter-derived" in sources:
+        return "parameter-derived"
+    if "unknown" in sources:
+        return "unknown"
+    return "constant"
 
 
 def _open_fact_type(call: ast.Call, *, is_method: bool) -> str:
@@ -159,7 +209,7 @@ def _file_path_facts(
             if path_node is None:
                 continue
             fact_type = _open_fact_type(child, is_method=False)
-            path_source = _classify_path(path_node, param_names)
+            path_source = _classify_arg(path_node, param_names)
             key = (fact_type, path_source)
             if key not in seen:
                 seen.add(key)
@@ -170,14 +220,14 @@ def _file_path_facts(
             receiver = func.value
 
             if method in _write_methods:
-                path_source = _classify_path(receiver, param_names)
+                path_source = _classify_arg(receiver, param_names)
                 key = ("file_write", path_source)
                 if key not in seen:
                     seen.add(key)
                     facts.append({"type": "file_write", "path_source": path_source})
 
             elif method in _read_methods:
-                path_source = _classify_path(receiver, param_names)
+                path_source = _classify_arg(receiver, param_names)
                 key = ("file_read", path_source)
                 if key not in seen:
                     seen.add(key)
@@ -185,7 +235,7 @@ def _file_path_facts(
 
             elif method == "open":
                 fact_type = _open_fact_type(child, is_method=True)
-                path_source = _classify_path(receiver, param_names)
+                path_source = _classify_arg(receiver, param_names)
                 key = (fact_type, path_source)
                 if key not in seen:
                     seen.add(key)
@@ -194,19 +244,22 @@ def _file_path_facts(
     return facts
 
 
-def _dangerous_sink_facts(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[SecurityFact]:
+def _dangerous_sink_facts(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, param_names: set[str]
+) -> list[SecurityFact]:
     facts: list[SecurityFact] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
 
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
             continue
 
         name = ast.unparse(child.func)
+        arg_source = _classify_arg(child.args[0], param_names) if child.args else "unknown"
 
-        if name in _DANGEROUS_SINKS and name not in seen:
-            seen.add(name)
-            facts.append({"type": "dangerous_sink", "name": name})
+        if name in _DANGEROUS_SINKS and (name, arg_source) not in seen:
+            seen.add((name, arg_source))
+            facts.append({"type": "dangerous_sink", "name": name, "arg_source": arg_source})
 
         if name in _SUBPROCESS_FUNCS:
             shell_kwarg = next((kw for kw in child.keywords if kw.arg == "shell"), None)
@@ -214,9 +267,9 @@ def _dangerous_sink_facts(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[
                     and isinstance(shell_kwarg.value, ast.Constant)
                     and shell_kwarg.value.value is True):
                 sink_name = f"{name}(shell=True)"
-                if sink_name not in seen:
-                    seen.add(sink_name)
-                    facts.append({"type": "dangerous_sink", "name": sink_name})
+                if (sink_name, arg_source) not in seen:
+                    seen.add((sink_name, arg_source))
+                    facts.append({"type": "dangerous_sink", "name": sink_name, "arg_source": arg_source})
 
     return facts
 

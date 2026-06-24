@@ -118,3 +118,62 @@ def test_environment_access_subscript():
 def test_no_facts_for_clean_function():
     facts = extract(_fn("def f(x, y): return x + y"))
     assert facts == []
+
+
+# arg_source: provenance of the value reaching a sink
+
+def test_subprocess_arg_source_parameter():
+    facts = extract(_fn("def f(name): subprocess.run(name, shell=False)"))
+    assert any(
+        f["type"] == "subprocess" and f["arg_source"] == "parameter:name" for f in facts
+    )
+
+
+def test_subprocess_arg_source_constant_list():
+    facts = extract(_fn("def f(): subprocess.run(['ls', '/tmp'], shell=False)"))
+    assert any(
+        f["type"] == "subprocess" and f["arg_source"] == "constant" for f in facts
+    )
+
+
+def test_subprocess_arg_source_parameter_in_list():
+    # A parameter as one element of an argv list is still parameter-reachable; a
+    # neighbouring constant must not mask it.
+    facts = extract(_fn("def f(name): subprocess.run(['podman', name], shell=False)"))
+    assert any(
+        f["type"] == "subprocess" and f["arg_source"] == "parameter:name" for f in facts
+    )
+
+
+def test_subprocess_arg_source_helper_call_is_unknown():
+    # The reviewer's case: value arrives via a helper call. Analysis limit, not proof
+    # of safety, so "unknown" rather than "constant".
+    facts = extract(_fn("def f(x): subprocess.run(build_cmd(x), shell=False)"))
+    assert any(
+        f["type"] == "subprocess" and f["arg_source"] == "unknown" for f in facts
+    )
+
+
+def test_subprocess_arg_source_fstring_parameter_derived():
+    facts = extract(_fn("def f(x): subprocess.run(f'echo {x}', shell=True)"))
+    assert any(
+        f["type"] == "subprocess" and f["arg_source"] == "parameter-derived" for f in facts
+    )
+
+
+def test_dangerous_sink_arg_source_parameter():
+    facts = extract(_fn("def f(x): return eval(x)"))
+    assert any(
+        f["type"] == "dangerous_sink" and f["name"] == "eval"
+        and f["arg_source"] == "parameter:x"
+        for f in facts
+    )
+
+
+def test_dangerous_sink_arg_source_constant():
+    facts = extract(_fn("def f(): return eval('1+1')"))
+    assert any(
+        f["type"] == "dangerous_sink" and f["name"] == "eval"
+        and f["arg_source"] == "constant"
+        for f in facts
+    )

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from stages import execute, hypothesise, index, ingest, report, synthesise, verify
+from stages import execute, hypothesise, index, ingest, report, screen, synthesise, verify
 
 CONFIG_PATH = Path("configs/pipeline.yaml")
 
@@ -25,6 +25,8 @@ def run(repo_path: Path, config_path: Path = CONFIG_PATH) -> None:
     ingest_ref: str | None = None
     slices_ref: str | None = None
     hypotheses_ref: str | None = None
+    accepted_ref: str | None = None
+    screen_verdicts_ref: str | None = None
     payloads_ref: str | None = None
     observations_ref: str | None = None
     verdicts_ref: str | None = None
@@ -51,10 +53,19 @@ def run(repo_path: Path, config_path: Path = CONFIG_PATH) -> None:
             )
             print(f"hypothesise  -> {hypotheses_ref[:12]}")
 
+        elif name == "screen":
+            assert hypotheses_ref, "hypothesise must run before screen"
+            assert slices_ref, "index must run before screen"
+            accepted_ref, screen_verdicts_ref = screen.run(hypotheses_ref, slices_ref)
+            print(f"screen       -> {accepted_ref[:12]} / {screen_verdicts_ref[:12]}")
+
         elif name == "synthesise":
-            assert hypotheses_ref, "hypothesise must run before synthesise"
+            # The screen, when present, narrows the hypothesis set fed to synthesise;
+            # without it, synthesise runs on the full hypothesise output.
+            synth_input = accepted_ref or hypotheses_ref
+            assert synth_input, "hypothesise must run before synthesise"
             payloads_ref = synthesise.run(
-                hypotheses_ref,
+                synth_input,
                 model_alias=stage["model"],
                 seed=stage.get("seed", 2),
                 max_tokens=stage.get("max_tokens", 256),

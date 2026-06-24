@@ -25,8 +25,10 @@ def run(verdicts_ref: str) -> Path:
     except Exception:
         tested_hyp_manifest = {}
 
-    confirmed: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    refuted: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    screen_verdicts = _load_screen_verdicts()
+
+    confirmed: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    refuted: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     skipped = 0
 
     for hyp_id, verdict_ref in sorted(verdicts_manifest.items()):
@@ -48,13 +50,13 @@ def run(verdicts_ref: str) -> Path:
             continue
 
         if verdict.get("verdict") == "CONFIRMED":
-            confirmed.append((verdict, hyp))
+            confirmed.append((hyp_id, verdict, hyp))
         else:
-            refuted.append((verdict, hyp))
+            refuted.append((hyp_id, verdict, hyp))
 
     now = datetime.now(timezone.utc)
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    report_content = _render(timestamp, confirmed, refuted, skipped)
+    report_content = _render(timestamp, confirmed, refuted, skipped, screen_verdicts)
 
     reports_dir = active_workspace().reports_dir
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -73,11 +75,27 @@ def run(verdicts_ref: str) -> Path:
     return report_path
 
 
+def _load_screen_verdicts() -> dict[str, dict[str, Any]]:
+    """Map hypothesis_id -> screen verdict dict. Empty when no screen stage ran."""
+    try:
+        manifest: dict[str, str] = json.loads(objects.get(refs.read("screen_verdicts_latest")))
+    except Exception:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for hyp_id, ref in manifest.items():
+        try:
+            out[hyp_id] = json.loads(objects.get(ref))
+        except Exception:
+            continue
+    return out
+
+
 def _render(
     timestamp: str,
-    confirmed: list[tuple[dict[str, Any], dict[str, Any]]],
-    refuted: list[tuple[dict[str, Any], dict[str, Any]]],
+    confirmed: list[tuple[str, dict[str, Any], dict[str, Any]]],
+    refuted: list[tuple[str, dict[str, Any], dict[str, Any]]],
     skipped: int,
+    screen_verdicts: dict[str, dict[str, Any]],
 ) -> str:
     lines: list[str] = [
         "# Vulnerability Report",
@@ -86,14 +104,31 @@ def _render(
         "",
     ]
 
+    if screen_verdicts:
+        counts: dict[str, int] = {}
+        for v in screen_verdicts.values():
+            counts[v.get("grounding", "?")] = counts.get(v.get("grounding", "?"), 0) + 1
+        rejected = counts.get("contradicted", 0) + counts.get("unsupported", 0)
+        lines.append("## Screening")
+        lines.append("")
+        lines.append(
+            f"Of {len(screen_verdicts)} hypotheses, the screen grounded "
+            f"{counts.get('grounded', 0)}, marked {counts.get('unknown', 0)} unknown "
+            f"(provenance unresolved, accepted at a capped prior), and rejected "
+            f"{rejected} before execution ({counts.get('contradicted', 0)} contradicted "
+            f"by the facts, {counts.get('unsupported', 0)} with no matching sink)."
+        )
+        lines.append("")
+
     lines.append("## Confirmed Findings")
     lines.append("")
     if confirmed:
-        for verdict, hyp in confirmed:
+        for hyp_id, verdict, hyp in confirmed:
             lines.append(f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}")
             lines.append(f"- Assumption broken: {hyp.get('assumption_broken', '')}")
             lines.append(f"- Expected effect: {hyp.get('expected_effect', '')}")
             lines.append(f"- Evidence: {verdict.get('evidence', '')}")
+            _append_grounding(lines, screen_verdicts.get(hyp_id))
             cve_refs = verdict.get("cve_refs", [])
             if cve_refs:
                 lines.append(f"- CVEs: {', '.join(cve_refs)}")
@@ -107,10 +142,20 @@ def _render(
     if refuted:
         lines.append("## Refuted Hypotheses")
         lines.append("")
-        for verdict, hyp in refuted:
+        for hyp_id, verdict, hyp in refuted:
             lines.append(f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}")
             lines.append(f"- Reason: {verdict.get('evidence', '')}")
+            _append_grounding(lines, screen_verdicts.get(hyp_id))
             lines.append(f"- Provenance: {hyp.get('provenance', '')}")
             lines.append("")
 
     return "\n".join(lines)
+
+
+def _append_grounding(lines: list[str], sv: dict[str, Any] | None) -> None:
+    if not sv:
+        return
+    lines.append(
+        f"- Grounding: {sv.get('grounding', '?')} ({sv.get('screen_reason', '?')}), "
+        f"effective confidence {sv.get('effective_confidence', '?')}"
+    )

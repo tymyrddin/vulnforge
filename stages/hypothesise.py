@@ -80,11 +80,11 @@ def run(slices_ref: str, *, model_alias: str, seed: int, max_tokens: int = 512) 
 def _render_fact(f: dict[str, Any]) -> str:
     t = f.get("type", "")
     if t == "subprocess":
-        return f"subprocess(shell={f['shell']}, argv={f['argv_style']})"
+        return f"subprocess(shell={f['shell']}, argv={f['argv_style']}, arg={f.get('arg_source', 'unknown')})"
     if t in ("file_write", "file_read"):
         return f"{t.replace('_', ' ')}: path from {f['path_source']}"
     if t == "dangerous_sink":
-        return f"dangerous sink: {f['name']}"
+        return f"dangerous sink: {f['name']} (arg from {f.get('arg_source', 'unknown')})"
     if t == "environment_access":
         return f"environment access: {f['call']}"
     return str(f)

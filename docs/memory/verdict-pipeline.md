@@ -6,16 +6,13 @@ What is done: `stages/verify.py` implements a deterministic comparator over
 `(Hypothesis, Observation)` pairs, emitting CONFIRMED/REFUTED verdicts. CVE
 correlation runs as the last step inside verify: CWE-based lookup against an
 offline OSV dump, with `cve_refs` attached to each verdict. `vulnforge
-bootstrap` downloads the CVE data.
+bootstrap` downloads the CVE data. Move 1 (the screening stage) has landed, in
+a taint-grounding form described below.
 
-What remains from this plan: Move 1 (screening stage), the closed-enum failure
-modes on `Hypothesis` from Move 2, and Move 4 (correlation loop / `vulnforge
-stats`). Move 3 (content-addressing) is substantially in place via the object
-store; the stricter `_ref`-field verification is not.
-
-The trigger for the screen stage: the first real scan producing enough
-hypotheses per run that the cost of guessing screening rules outweighs the
-cost of writing them down.
+What remains from this plan: the closed-enum failure modes on `Hypothesis`
+from Move 2, and Move 4 (correlation loop / `vulnforge stats`). Move 3
+(content-addressing) is substantially in place via the object store; the
+stricter `_ref`-field verification is not.
 
 ## Why this plan exists
 
@@ -70,14 +67,62 @@ What is missing:
 - A correlation surface that lets a future run answer "did our
   screening rules actually reduce wasted container launches".
 
-## Move 1: a screening stage
+## Move 1: a screening stage (implemented)
 
-New module: `stages/screen.py`. Sits between hypothesise and execute.
-Takes a list of `Hypothesis` objects, returns a partition: `accepted`
-and `rejected`. Rejections carry a closed-enum `ScreenFailure` and
-the offending field reference, no prose rationale.
+`stages/screen.py` sits between hypothesise and synthesise, not hypothesise
+and execute: rejecting a hypothesis before synthesise saves the synthesis model
+call as well as the container launch. It reads the hypothesis manifest and the
+slice manifest, and emits two refs, `screen_accepted_latest` (a hypothesis
+manifest, same shape as hypothesise output, so synthesise consumes it unchanged)
+and `screen_verdicts_latest` (one `ScreenVerdict` per hypothesis, accepted or
+rejected, kept for measurement).
 
-Checks, deterministic and cheap:
+The shape that landed is taint grounding, a refinement of the attack-type
+consistency check below. The prompted reason: a reviewer pointed out that the
+pipeline classified vulnerability tropes onto sinks without ever checking
+whether attacker-controlled data reaches them. The fix is to compute that
+source-to-sink relation in code, from the `arg_source` provenance now carried on
+every subprocess and dangerous-sink fact (`extractors/python.py`), and make it
+consequential for acceptance and confidence rather than leaving it as advice in
+the prompt.
+
+Each hypothesis lands in one of four grounding states, defined in
+`schema/screen.py`:
+
+- `grounded`: a parameter reaches a sink matching the attack class. Accept at
+  the model's confidence.
+- `unknown`: a matching sink exists but its argument provenance is unresolved
+  (a helper call the single-function AST pass cannot follow). Accept, but cap
+  confidence at `UNKNOWN_CONFIDENCE_CAP` (0.35, a policy constant, not a measured
+  threshold; the only load-bearing property is that unknown ranks below grounded).
+  "Unresolved" is the analysis hitting its limit, not proof the attacker has no
+  influence, so the hypothesis survives at a lowered prior rather than being
+  discarded.
+- `contradicted`: the facts rule the mechanism out, for example shell
+  metacharacters under `shell=False`, or a constant sink argument no parameter
+  can reach. Reject.
+- `unsupported`: no sink matching the attack class exists in the slice. Reject.
+
+The line that this stage exists to hold: never conflate "not tainted"
+(constant, contradicted) with "taint unresolved" (unknown). Where several
+matching sinks disagree, the strongest claim wins, grounded over unknown over
+contradicted over unsupported, so an analysis limit on one sink never
+masquerades as proof across the others.
+
+Two honesty rules on the edges. Catch-all reasons (`attack_type_unrecognised`
+for a class with no detector, `screen_other`) land in `unknown`, never
+`unsupported`, so a novel attack class is penalised rather than silently
+rejected. SQL injection has no sink detector, so it is assessed by imports as a
+deliberately weak signal: no database import is `unsupported`, a database import
+with no detectable query construction is `unknown` (`insufficient_sql_evidence`),
+never grounded.
+
+The original Move 1 sketch below also named location-resolution, payload-syntax,
+and reachability checks. Those have not landed yet; the grounding gate was the
+move that answered the reviewer's critique, and the others can follow as the
+attack-type predicate registry grows.
+
+Checks from the original sketch, deterministic and cheap:
 
 - Location resolves. `Hypothesis.location` is a file path with an
   optional line or symbol. The screener confirms the file is in the
