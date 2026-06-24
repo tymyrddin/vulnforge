@@ -77,6 +77,19 @@ def run(slices_ref: str, *, model_alias: str, seed: int, max_tokens: int = 512) 
     return hypotheses_ref
 
 
+def _render_fact(f: dict[str, Any]) -> str:
+    t = f.get("type", "")
+    if t == "subprocess":
+        return f"subprocess(shell={f['shell']}, argv={f['argv_style']})"
+    if t in ("file_write", "file_read"):
+        return f"{t.replace('_', ' ')}: path from {f['path_source']}"
+    if t == "dangerous_sink":
+        return f"dangerous sink: {f['name']}"
+    if t == "environment_access":
+        return f"environment access: {f['call']}"
+    return str(f)
+
+
 def _format_slice(s: dict[str, Any]) -> str:
     lines = [
         f"# File: {s['file_path']}",
@@ -99,6 +112,10 @@ def _format_slice(s: dict[str, Any]) -> str:
         lines.append(f"# Called by: {', '.join(ctx['callers'])}")
     if ctx.get("callees"):
         lines.append(f"# Intra-file callees: {', '.join(ctx['callees'])}")
+    if s.get("security_facts"):
+        lines.append("# Security facts:")
+        for fact in s["security_facts"]:
+            lines.append(f"#   {_render_fact(fact)}")
     lines.append("")
     lines.append(s.get("body", ""))
     return "\n".join(lines)

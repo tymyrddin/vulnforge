@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from audit.log import append as audit_append
+from extractors.python import extract as _extract_python_facts
 from schema.audit_event import AuditEvent
 from store import objects, refs
 
@@ -72,6 +73,7 @@ def _index_file(
             "globals_used": _globals_used(node, module_names),
             "imports": imports,
             "context": {"callers": [], "callees": []},
+            "security_facts": _extract_python_facts(node),
         }
 
     for caller, data in funcs.items():
