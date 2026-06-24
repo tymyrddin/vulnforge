@@ -1,4 +1,4 @@
-"""Cleanup invariants for sandbox.run.
+"""Clean-up invariants for sandbox.run.
 
 The containers spawned by ``sandbox.run.run`` are daemonised via conmon/runc,
 which means killing the podman client does not kill the container. This test
@@ -17,7 +17,7 @@ import subprocess
 import pytest
 
 from bootstrap import build_sandbox
-from sandbox.run import _active, run
+from sandbox import run as sandbox_run
 
 
 def _image_hash() -> str | None:
@@ -45,19 +45,19 @@ def _live_vulnforge_containers() -> list[str]:
 def test_clean_exit_tears_down_container() -> None:
     image = _image_hash()
     assert image is not None
-    result = run(image=image, command=["true"], timeout_seconds=10)
+    result = sandbox_run.run(image=image, command=["true"], timeout_seconds=10)
     assert result.exit_code == 0
     assert not result.timed_out
     assert _live_vulnforge_containers() == []
-    assert _active == set()
+    assert sandbox_run._active == set()  # Protected access for test verification
 
 
 @skip_if_no_sandbox
 def test_timeout_tears_down_container() -> None:
     image = _image_hash()
     assert image is not None
-    result = run(image=image, command=["sleep", "60"], timeout_seconds=2)
+    result = sandbox_run.run(image=image, command=["sleep", "60"], timeout_seconds=2)
     assert result.timed_out
     assert result.exit_code == 124
     assert _live_vulnforge_containers() == [], "container leaked after timeout"
-    assert _active == set(), "active set leaked after timeout"
+    assert sandbox_run._active == set(), "active set leaked after timeout"

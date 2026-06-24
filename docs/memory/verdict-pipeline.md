@@ -1,10 +1,20 @@
 # Verdict pipeline plan
 
-Status: not implemented. Plan recorded so the next person reading the
-repo knows where the design is headed. The trigger for starting work
-is the first complete staged run (hypothesise, screen, execute,
-verify, report) producing more than a handful of hypotheses per scan,
-at which point the cost of guessing screening rules outweighs the
+Status: partially implemented.
+
+What is done: `stages/verify.py` implements a deterministic comparator over
+`(Hypothesis, Observation)` pairs, emitting CONFIRMED/REFUTED verdicts. CVE
+correlation runs as the last step inside verify: CWE-based lookup against an
+offline OSV dump, with `cve_refs` attached to each verdict. `vulnforge
+bootstrap` downloads the CVE data.
+
+What remains from this plan: Move 1 (screening stage), the closed-enum failure
+modes on `Hypothesis` from Move 2, and Move 4 (correlation loop / `vulnforge
+stats`). Move 3 (content-addressing) is substantially in place via the object
+store; the stricter `_ref`-field verification is not.
+
+The trigger for the screen stage: the first real scan producing enough
+hypotheses per run that the cost of guessing screening rules outweighs the
 cost of writing them down.
 
 ## Why this plan exists

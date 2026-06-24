@@ -38,9 +38,11 @@ For what this design does and does not remove from the trust path, see [trust-pa
 vulnforge/
   bootstrap/           one-time, network-using; outside the analysis pipeline
     fetch_models.py
+    fetch_cve.py       downloads OSV.dev / db.gcve.eu CVE dump
     build_sandbox.py
     models.lock        SHA256 pins for each weight
     sandbox.lock       SHA256 of the built image
+  cve/                 CVE correlation: CWE map, offline index, OSV loader
   schema/              frozen data types; verdict transitions live in stages/verify.py
   store/               content-addressed object store and named refs
   audit/               hash-chained JSONL log
@@ -59,6 +61,7 @@ Runtime state lives outside the framework checkout under `$XDG_DATA_HOME/vulnfor
 `~/.local/share/vulnforge/`):
 
 - `weights/` model weights, shared across runs
+- `cve/osv-pypi/` CVE data downloaded by bootstrap, shared across runs
 - `corpus/` input files to be analysed, persistent and user-curated; the framework reads it, never writes to it
 - `runs/<run-id>/` per-scan artefacts: object store, refs, audit log, llama stderr logs, reports, probe artefacts
 
@@ -66,7 +69,9 @@ Override via `--workspace <path>` or `$VULNFORGE_WORKSPACE`.
 
 ## Status
 
-Infrastructure is real and runnable:
+All seven stages are implemented and wired into the orchestrator. `vulnforge scan <repo>` runs the full pipeline.
+
+Infrastructure:
 
 - Frozen schema types (`Status`, `EvidenceType`, `VerificationStatus`) with a state machine that refuses bad
   transitions. `Hypothesis.propose` rejects model-supplied CONFIRMED or EXECUTION_OBSERVED at construction.
@@ -77,16 +82,19 @@ Infrastructure is real and runnable:
   a module-level set on creation, torn down through one `_cleanup` function reachable from every exit path (normal
   return, timeout, SIGINT, SIGTERM, atexit).
 - llama.cpp subprocess runner that passes prompt via stdin so it does not appear in `/proc`.
-- Bootstrap fetch with SHA256 verification.
+- Bootstrap fetch with SHA256 verification for weights and CVE data.
 - Workspace separation: framework checkout is immutable; runtime artefacts live under `$XDG_DATA_HOME/vulnforge/`.
-- `vulnforge probe` for one-shot hypothesis generation with per-failure-layer artefacts.
+- `vulnforge probe` for one-shot hypothesis generation with per-failure-layer artefacts. `--function NAME` extracts
+  a single function using the same slice format as the pipeline, keeping probe representative of a real scan.
+- CVE correlation as the last step inside `verify`: deterministic CWE-based lookup against an offline OSV dump,
+  `cve_refs` attached to each confirmed verdict.
+- Marker injection in `synthesise`: for `command_injection` payloads, a unique `VULNFORGE_<hex>` string is appended
+  to the payload value and stored alongside it. `verify` checks for the marker in sandbox stdout rather than treating
+  any non-zero exit as confirmation.
 
-Stages: skeletal. `ingest` walks a repo into the store. `index`, `hypothesise`, `synthesise`, `execute`, `verify`,
-`report` raise `NotImplementedError`. The data flow and trust boundaries are wired in; the analysis content is what
-remains.
-
-For the planned verdict pipeline (screening, verification, content addressing, correlation),
-see [verdict-pipeline.md](../memory/verdict-pipeline.md). For open design questions (Run vs Workspace separation,
+What remains from the verdict pipeline plan: the screening stage between hypothesise and execute, closed-enum failure
+modes on `Hypothesis`, and the `vulnforge stats` correlation surface. See
+[verdict-pipeline.md](../memory/verdict-pipeline.md). For open design questions (Run vs Workspace separation,
 concurrent scans, crash recovery), see [run-concept.md](../memory/run-concept.md).
 
 ## Closing note

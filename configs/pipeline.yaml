@@ -6,13 +6,13 @@ stages:
   - name: ingest
   - name: index
   - name: hypothesise
-    model: qwen2.5-coder-7b
+    model: qwen3-8b
     seed: 1
-    max_tokens: 1024
+    max_tokens: 512
   - name: synthesise
     model: qwen2.5-coder-7b
     seed: 2
-    max_tokens: 512
+    max_tokens: 256
   - name: execute
     timeout_seconds: 60
   - name: verify

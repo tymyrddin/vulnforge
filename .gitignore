@@ -31,11 +31,12 @@ htmlcov/
 .ruff_cache/
 
 # Vulnforge runtime should live under $XDG_DATA_HOME/vulnforge/, not in the
-# checkout. This entry is defensive: catches stray .vulnforge/ directories
-# that earlier versions wrote here, or that a user creates by mistake.
-# Bootstrap output (sandbox.lock) is per-machine state.
+# checkout. These entries are defensive: they catch stray directories that
+# appear if someone passes --workspace . from inside the repo, or that earlier
+# versions wrote here. Bootstrap output (sandbox.lock) is per-machine state.
 .vulnforge/
 bootstrap/sandbox.lock
+runs/
 
 # Secrets
 .env

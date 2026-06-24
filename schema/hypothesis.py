@@ -20,7 +20,29 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-_FORBIDDEN_INPUT_CHARS = re.compile(r"[*()]")
+# Matches template tokens rather than concrete attack strings.
+# Parentheses and other syntax are NOT banned: for code-execution attacks
+# the payload IS an expression, and the sandbox prevents any real harm.
+_PLACEHOLDER_RE = re.compile(
+    r"""
+    <[A-Za-z_]\w*>          # <placeholder> / <type>
+    | \{[A-Za-z_]\w*\}      # {placeholder}
+    | \[[A-Z][A-Z0-9_]+\]   # [PLACEHOLDER]
+    | \.{3}                  # ... standing in for "something"
+    """,
+    re.VERBOSE,
+)
+
+
+def _is_placeholder(s: str) -> bool:
+    """True when s looks like a template token rather than a testable value."""
+    if _PLACEHOLDER_RE.search(s):
+        return True
+    stripped = s.strip()
+    if stripped in ("*", "**"):
+        return True
+    # SCREAMING_SNAKE_CASE with at least one underscore: classic template variable
+    return bool(re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", stripped))
 
 
 class Status(str, Enum):
@@ -90,11 +112,10 @@ class Hypothesis:
                     f"suggested_inputs element must be a string, "
                     f"got {type(s).__name__}: {s!r}"
                 )
-            if _FORBIDDEN_INPUT_CHARS.search(s):
+            if _is_placeholder(s):
                 raise ValueError(
-                    f"suggested_inputs must be concrete strings, not "
-                    f"expressions: {s!r} contains one of * ( ). "
-                    f"Write the literal characters instead."
+                    f"suggested_inputs must be testable values, not template "
+                    f"placeholders: {s!r}"
                 )
         return cls(
             attack_type=attack_type,

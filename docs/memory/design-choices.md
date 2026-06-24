@@ -127,10 +127,17 @@ every call site, and avoids subtle bugs from converting at the wrong layer.
 
 ### Probe: one-shot inference, bypassing the staged pipeline
 
-`vulnforge probe <file>` runs the hypothesise prompt against a single file.
-The full staged pipeline (index, hypothesise, synthesise, execute, verify,
-report) is not yet implemented; probe exercises the prompt and schema layer
-without those stages.
+`vulnforge probe <file>` runs the hypothesise prompt against a single file,
+bypassing the staged pipeline. Useful for tuning the prompt and schema layer
+in isolation before committing to a full scan.
+
+`--function NAME` extracts a single function using the same slice format as
+the index and hypothesise stages. Without it, probe sends the raw file; the
+model sees the full source including docstrings, which can prime the wrong
+attack template (a file with a container-related docstring will attract
+container security hypotheses regardless of the function). The flag keeps
+probe representative of what happens during a real pipeline run and is the
+correct form for prompt tuning.
 
 Per-probe artefacts under the workspace root:
 
@@ -180,12 +187,10 @@ clean exit or a forced timeout.
 These are decisions we have not yet made. Listed so the next person reading
 this file knows where the live design questions are.
 
-- Verdict pipeline: a screening stage between hypothesise and execute, a
-  deterministic comparator in `stages/verify.py`, closed-enum failure
-  modes, and a `vulnforge stats` correlation surface. See
-  [verdict-pipeline.md](verdict-pipeline.md). Deferred until the first complete staged run
-  produces enough hypotheses per scan to make rule-writing cheaper than
-  rule-guessing.
+- Verdict pipeline: screening stage between hypothesise and execute, and
+  closed-enum failure modes on `Hypothesis`. `stages/verify.py` is implemented;
+  the screener and `vulnforge stats` are still pending. See
+  [verdict-pipeline.md](verdict-pipeline.md).
 - `Run` vs `Workspace` separation: making workspaces own their containers and
   audit cursors. See `run-concept.md`. Deferred until a concrete trigger
   (concurrent scans, crash recovery, audit provenance) shows up.
@@ -196,6 +201,28 @@ this file knows where the live design questions are.
 - Workspace locking: preventing two concurrent scans from writing to the same
   `run-id`. Not currently possible (each scan creates a fresh timestamped
   run dir), but worth a flag once concurrency arrives.
-- Whether the staged pipeline is built up first (index, hypothesise, ...) or
-  the probe is extended into a richer ad-hoc analysis tool. Probably the
-  former, but the probe has proven useful enough to keep.
+
+## Model selection for hypothesise: /no_think required for thinking models on CPU
+
+qwen3-8b is a thinking model: it generates a `<think>...</think>` chain before
+any JSON output. On CPU at roughly 1-2 tok/sec, a complex slice can produce
+2,000 or more thinking tokens before the JSON answer appears. At that rate,
+no slice completes within the 300-second `infer()` default timeout. The failure
+is silent: every container runs for exactly 300 seconds, times out, and is skipped;
+the scan appears to run but produces zero hypotheses.
+
+The fix: `no_think: true` in `bootstrap/models.lock` for qwen3-8b. When set,
+`inference/runner.py` prepends `/no_think` to the prompt before inference.
+qwen3-8b respects this in plain completion mode (`--simple-io --single-turn`)
+without a chat template, skipping the thinking chain entirely. Output becomes
+direct and comparable in speed to qwen2.5-coder-7b.
+
+`configs/pipeline.yaml` uses `qwen3-8b` for hypothesise and `qwen2.5-coder-7b`
+for synthesise. `probe` defaults to `qwen3-8b`; the `no_think` flag applies
+automatically from `ModelSpec`.
+
+The structural gap that caused the silent failure: `hypothesise.run()` had no
+`timeout_seconds` parameter, so the 300-second `infer()` default was invisible
+in config. The fix is that `max_tokens` is now wired from `pipeline.yaml` through
+the stage; timeout remains the `infer()` default, which is appropriate for
+qwen3-8b with `no_think` at max_tokens=512.

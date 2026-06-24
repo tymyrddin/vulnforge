@@ -41,6 +41,10 @@ def weights_dir() -> Path:
     return _root() / "weights"
 
 
+def cve_dir() -> Path:
+    return _root() / "cve"
+
+
 def corpus_dir() -> Path:
     return _root() / "corpus"
 

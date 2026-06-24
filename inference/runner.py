@@ -83,7 +83,10 @@ def infer(
     ctx_size: int = 4096,
     log_dir: Path | None = None,
     debug_llama: bool = False,
+    no_think: bool = False,
 ) -> InferenceResult:
+    if no_think:
+        prompt = "/no_think\n\n" + prompt
     actual = _file_sha256(weights_path)
     if actual != weights_hash:
         raise ValueError(

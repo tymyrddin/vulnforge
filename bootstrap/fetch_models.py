@@ -29,6 +29,7 @@ class ModelSpec:
     alias: str
     url: str
     sha256: str
+    no_think: bool = False
 
     @property
     def dest(self) -> Path:

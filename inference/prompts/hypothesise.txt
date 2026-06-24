@@ -15,22 +15,26 @@ Hard rules:
    - evidence_type: "static_pattern" or "behaviour_inferred"
    - verification_status: "unverified"
    The downstream verifier sets "execution_observed" / "confirmed" after running tests; you cannot.
+7. location must name a function that appears in the code you are given below. Do not reuse the location from the schema example.
+8. Attacker model: the attacker controls only the values passed to the function's parameters, the contents of files the function reads, and environment variables the code explicitly references. The attacker cannot reconfigure the runtime, change implementation flags, or supply arguments to tools the function invokes internally. A function that constructs a podman command does not give the attacker access to podman flags; the attacker controls only what flows into the function's own parameters.
+9. suggested_inputs must be concrete values passable through the function's actual parameters as listed above. If an input is a tool flag rather than a function argument, it is not a valid suggested input. If an attack requires changing execution flags (e.g. podman/docker options), it is INVALID.
+10. Treat each function parameter as atomic data, not a structured command language. Do not interpret string values as key=value configuration or mount specs unless the code explicitly parses them that way. A string parameter is just a string; the model must not invent a DSL for it.
+11. Only propose attacks that exploit how the function processes its parameters, not how those parameters could be reinterpreted by an external system the function happens to call.
 
-Schema:
+Schema (example only — do not copy these values, analyse the code below this schema):
 {
   "hypotheses": [
     {
-      "attack_type": "e.g. SQL injection, SSRF, path traversal, deserialisation, auth bypass",
-      "location": "file:function or file:line",
-      "assumption_broken": "the invariant the attack would violate",
-      "expected_effect": "what the verifier would observe if the hypothesis holds",
-      "suggested_inputs": ["AAAAAAAAAAAAAAAAAAAA", "user' OR '1'='1"],
-      "confidence": 0.0,
-      "evidence_type": "static_pattern | behaviour_inferred",
+      "attack_type": "SQL injection",
+      "location": "db.py::query_user",
+      "assumption_broken": "inputs are sanitised before interpolation",
+      "expected_effect": "extra rows returned",
+      "suggested_inputs": ["' OR '1'='1", "admin'--"],
+      "confidence": 0.8,
+      "evidence_type": "static_pattern",
       "verification_status": "unverified"
     }
   ]
 }
 
-Code slice follows.
-
+Analyse the following code and produce hypotheses specific to it:

@@ -33,8 +33,12 @@ def bootstrap(verify_only: bool, skip_image: bool) -> None:
     """Fetch weights, build the sandbox image. The only network-using step."""
     from bootstrap import build_sandbox, fetch_models
 
+    from bootstrap import fetch_cve
+
     click.echo(f"weights:  {workspace.weights_dir()}")
     fetch_models.fetch_all(verify_only=verify_only)
+    click.echo(f"cve:      {workspace.cve_dir()}")
+    fetch_cve.fetch_all(verify_only=verify_only)
     if not verify_only and not skip_image:
         image_hash = build_sandbox.build()
         click.echo(f"sandbox image built: {image_hash}")
@@ -176,7 +180,7 @@ def _extract_first_json_object(text: str) -> str:
 
 @main.command()
 @click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--alias", default="qwen2.5-coder-7b", show_default=True,
+@click.option("--alias", default="qwen3-8b", show_default=True,
               help="models.lock alias to use for inference.")
 @click.option("--seed", default=1, show_default=True, type=int)
 @click.option("--max-tokens", default=1024, show_default=True, type=int)
@@ -189,27 +193,37 @@ def _extract_first_json_object(text: str) -> str:
 @click.option("--debug-llama", is_flag=True,
               help="Stream llama.cpp's own load and timing logs to stderr "
                    "instead of suppressing them (--log-disable -> --log-file).")
+@click.option("--function", "function_name", default=None, metavar="NAME",
+              help="Extract a single named function using the pipeline slice format "
+                   "instead of sending the raw file. Keeps probe representative of "
+                   "the real pipeline context.")
 def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
-          timeout: int, workspace_opt: Path | None, debug_llama: bool) -> None:
+          timeout: int, workspace_opt: Path | None, debug_llama: bool,
+          function_name: str | None) -> None:
     """Run the hypothesise prompt against SOURCE (a single file).
 
-    Bypasses the staged pipeline. Prints raw model output, then attempts to
-    parse it as JSON and reconstruct each hypothesis through the schema gate.
-    Hypotheses that violate the schema (e.g. claiming CONFIRMED at propose
-    time) are reported as rejected.
+    Bypasses the staged pipeline. By default, extracts every function via AST
+    and runs one inference per function using the same slice format the pipeline
+    uses. Use --function NAME to focus on a single function.
+
+    Falls back to sending the raw file only when no Python functions are found.
 
     Run artefacts under the workspace root:
-      probe-prompt.txt       exact prompt sent to the sandbox
-      probe-output.txt       raw post-strip model output
-      probe-extracted.txt    the {...} block we attempted to parse
-      probe-parsed.json      extracted JSON object, after json.loads succeeds
-      probe-rejections.jsonl one line per rejected hypothesis (only if any)
+      probe-prompt.txt            single-function runs
+      probe-<fn>-prompt.txt       multi-function runs (one set per function)
+      probe-output.txt / probe-<fn>-output.txt
+      probe-extracted.txt / probe-<fn>-extracted.txt
+      probe-parsed.json / probe-<fn>-parsed.json
+      probe-rejections.jsonl / probe-<fn>-rejections.jsonl (only if any)
     """
+    import ast
     import json
 
     from bootstrap import build_sandbox, fetch_models
     from inference.runner import infer
     from schema.hypothesis import EvidenceType, Hypothesis, VerificationStatus
+    from stages.hypothesise import _format_slice
+    from stages.index import _index_file
 
     ws = _resolve_workspace(workspace_opt)
     click.echo(f"workspace: {ws.root}")
@@ -235,98 +249,180 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
 
     prompt_template = PROMPT_PATH.read_text()
     source_text = source.read_text()
-    prompt = f"{prompt_template}{source_text}"
+
+    # Build the list of (code_context, fn_label, artefact_prefix) entries to run.
+    raw_fallback = False
+    if function_name is not None:
+        try:
+            tree = ast.parse(source_text, filename=str(source))
+        except SyntaxError as e:
+            raise click.ClickException(f"failed to parse {source}: {e}") from e
+        all_slices = _index_file(str(source), "", source_text, tree)
+        matches = {k: v for k, v in all_slices.items() if v["function_name"] == function_name}
+        if not matches:
+            available = sorted(v["function_name"] for v in all_slices.values())
+            raise click.ClickException(
+                f"function {function_name!r} not found in {source}; "
+                f"available: {', '.join(available) or '(none)'}"
+            )
+        _slice_id, slice_data = next(iter(matches.items()))
+        to_probe = [(_format_slice(slice_data), f"{source}::{function_name}", "probe")]
+    else:
+        try:
+            tree = ast.parse(source_text, filename=str(source))
+            all_slices = _index_file(str(source), "", source_text, tree)
+        except SyntaxError:
+            all_slices = {}
+        if all_slices:
+            pairs = sorted(all_slices.items())
+            if len(pairs) == 1:
+                _sid, sd = pairs[0]
+                to_probe = [(_format_slice(sd), f"{source}::{sd['function_name']}", "probe")]
+            else:
+                to_probe = [
+                    (_format_slice(sd), f"{source}::{sd['function_name']}", f"probe-{sd['function_name']}")
+                    for _sid, sd in pairs
+                ]
+        else:
+            raw_fallback = True
+            to_probe = [(source_text, str(source), "probe")]
 
     ws.root.mkdir(parents=True, exist_ok=True)
-    prompt_path = ws.root / "probe-prompt.txt"
-    prompt_path.write_text(prompt)
+    multi = len(to_probe) > 1
 
-    click.echo(f"source:   {source} ({len(source_text)} chars)")
+    if multi:
+        click.echo(f"source:   {source} ({len(to_probe)} functions)")
     click.echo(f"weights:  {spec.alias}")
     click.echo(f"image:    {image_hash[:12]}")
-    click.echo(f"prompt:   {prompt_path}")
     click.echo(f"stderr:   {ws.logs_dir}/llama-*.log")
-    click.echo("inference running inside sandbox...")
 
-    result = infer(
-        prompt=prompt,
-        weights_path=spec.dest,
-        weights_hash=spec.sha256,
-        sandbox_image=image_hash,
-        seed=seed,
-        max_tokens=max_tokens,
-        ctx_size=ctx_size,
-        timeout_seconds=timeout,
-        log_dir=ws.logs_dir,
-        debug_llama=debug_llama,
-    )
+    total_accepted = 0
+    total_rejected_count = 0
 
-    raw_path = ws.root / "probe-output.txt"
-    raw_path.write_text(result.output_text)
+    for code_context, fn_label, artefact_prefix in to_probe:
+        prompt = (
+            f"{prompt_template}{code_context}"
+            if raw_fallback
+            else f"{prompt_template}\n\n{code_context}"
+        )
+        prompt_path = ws.root / f"{artefact_prefix}-prompt.txt"
+        prompt_path.write_text(prompt)
 
-    click.echo()
-    click.echo(f"=== raw model output ({len(result.output_text)} chars, saved to {raw_path}) ===")
-    click.echo(result.output_text)
-    click.echo()
+        if multi:
+            click.echo(f"\nfunction: {fn_label.split('::')[-1]} ({len(code_context)} chars)")
+        else:
+            click.echo(f"source:   {fn_label} ({len(code_context)} chars)")
+        click.echo(f"prompt:   {prompt_path}")
+        click.echo("inference running inside sandbox...")
 
-    try:
-        json_blob = _extract_first_json_object(result.output_text)
-    except ValueError as e:
-        raise click.ClickException(f"no JSON object in output: {e}")
-    extracted_path = ws.root / "probe-extracted.txt"
-    extracted_path.write_text(json_blob)
-    click.echo(f"extract:  {extracted_path}")
-    try:
-        data = json.loads(json_blob)
-    except json.JSONDecodeError as e:
-        raise click.ClickException(f"extracted blob is not valid JSON: {e}")
+        result = infer(
+            prompt=prompt,
+            weights_path=spec.dest,
+            weights_hash=spec.sha256,
+            sandbox_image=image_hash,
+            seed=seed,
+            max_tokens=max_tokens,
+            ctx_size=ctx_size,
+            timeout_seconds=timeout,
+            log_dir=ws.logs_dir,
+            debug_llama=debug_llama,
+            no_think=spec.no_think,
+        )
 
-    parsed_path = ws.root / "probe-parsed.json"
-    parsed_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-    click.echo(f"parsed:   {parsed_path}")
+        raw_path = ws.root / f"{artefact_prefix}-output.txt"
+        raw_path.write_text(result.output_text)
 
-    if not isinstance(data, dict) or "hypotheses" not in data:
-        raise click.ClickException("output JSON has no 'hypotheses' key")
-    if not isinstance(data["hypotheses"], list):
-        raise click.ClickException("'hypotheses' is not a list")
+        click.echo()
+        click.echo(f"=== {fn_label} ({len(result.output_text)} chars, saved to {raw_path}) ===")
+        click.echo(result.output_text)
+        click.echo()
 
-    click.echo("=== parsed hypotheses ===")
-    rejections: list[dict] = []
-    accepted = 0
-    for i, item in enumerate(data["hypotheses"]):
         try:
-            h = Hypothesis.propose(
-                attack_type=item["attack_type"],
-                location=item["location"],
-                assumption_broken=item["assumption_broken"],
-                expected_effect=item["expected_effect"],
-                suggested_inputs=item.get("suggested_inputs", []),
-                confidence=float(item["confidence"]),
-                model_hash=result.weights_hash,
-                evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
-                verification_status=VerificationStatus(
-                    item.get("verification_status", "unverified")
-                ),
-            )
-            click.echo(
-                f"  [{i}] ok       {h.attack_type} @ {h.location} "
-                f"(conf={h.confidence:.2f}, {h.evidence_type.value})"
-            )
-            accepted += 1
-        except (KeyError, TypeError, ValueError) as e:
-            reason = f"{type(e).__name__}: {e}"
-            click.echo(f"  [{i}] rejected {reason}")
-            rejections.append({"index": i, "raw": item, "rejection": reason})
+            json_blob = _extract_first_json_object(result.output_text)
+        except ValueError as e:
+            if multi:
+                click.echo(f"no JSON object in output: {e}")
+                continue
+            raise click.ClickException(f"no JSON object in output: {e}")
 
-    if rejections:
-        rejections_path = ws.root / "probe-rejections.jsonl"
-        with rejections_path.open("w") as f:
-            for r in rejections:
-                f.write(json.dumps(r, sort_keys=True) + "\n")
-        click.echo(f"rejected: {rejections_path}")
+        extracted_path = ws.root / f"{artefact_prefix}-extracted.txt"
+        extracted_path.write_text(json_blob)
+        if not multi:
+            click.echo(f"extract:  {extracted_path}")
+
+        try:
+            data = json.loads(json_blob)
+        except json.JSONDecodeError as e:
+            if multi:
+                click.echo(f"extracted blob is not valid JSON: {e}")
+                continue
+            raise click.ClickException(f"extracted blob is not valid JSON: {e}")
+
+        parsed_path = ws.root / f"{artefact_prefix}-parsed.json"
+        parsed_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+        if not multi:
+            click.echo(f"parsed:   {parsed_path}")
+
+        if not isinstance(data, dict) or "hypotheses" not in data:
+            if multi:
+                click.echo("output JSON has no 'hypotheses' key")
+                continue
+            raise click.ClickException("output JSON has no 'hypotheses' key")
+        if not isinstance(data["hypotheses"], list):
+            if multi:
+                click.echo("'hypotheses' is not a list")
+                continue
+            raise click.ClickException("'hypotheses' is not a list")
+
+        click.echo("=== parsed hypotheses ===")
+        rejections: list[dict] = []
+        accepted = 0
+        for i, item in enumerate(data["hypotheses"]):
+            try:
+                h = Hypothesis.propose(
+                    attack_type=item["attack_type"],
+                    location=item["location"],
+                    assumption_broken=item["assumption_broken"],
+                    expected_effect=item["expected_effect"],
+                    suggested_inputs=item.get("suggested_inputs", []),
+                    confidence=float(item["confidence"]),
+                    model_hash=result.weights_hash,
+                    evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
+                    verification_status=VerificationStatus(
+                        item.get("verification_status", "unverified")
+                    ),
+                )
+                click.echo(
+                    f"  [{i}] ok       {h.attack_type} @ {h.location} "
+                    f"(conf={h.confidence:.2f}, {h.evidence_type.value})"
+                )
+                accepted += 1
+            except (KeyError, TypeError, ValueError) as e:
+                reason = f"{type(e).__name__}: {e}"
+                click.echo(f"  [{i}] rejected {reason}")
+                rejections.append({"index": i, "raw": item, "rejection": reason})
+
+        if rejections:
+            rejections_path = ws.root / f"{artefact_prefix}-rejections.jsonl"
+            with rejections_path.open("w") as f:
+                for r in rejections:
+                    f.write(json.dumps(r, sort_keys=True) + "\n")
+            if not multi:
+                click.echo(f"rejected: {rejections_path}")
+
+        total_accepted += accepted
+        total_rejected_count += len(rejections)
+        if multi:
+            click.echo(f"  {accepted} accepted, {len(rejections)} rejected")
 
     click.echo()
-    click.echo(f"summary:  {accepted} accepted, {len(rejections)} rejected")
+    if multi:
+        click.echo(
+            f"total:    {total_accepted} accepted, {total_rejected_count} rejected "
+            f"across {len(to_probe)} functions"
+        )
+    else:
+        click.echo(f"summary:  {total_accepted} accepted, {total_rejected_count} rejected")
 
 
 if __name__ == "__main__":
