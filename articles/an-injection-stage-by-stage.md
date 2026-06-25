@@ -73,12 +73,13 @@ against the recorded facts.
                          ▼         ▼
                   Contradicted  arg_source
                                    │
-                 ┌─────────────────┼────────────────┐
-                 ▼                 ▼                ▼
-            parameter      parameter-derived     unknown
-                 │                 │                │
-                 ▼                 ▼                ▼
-             Grounded          Grounded           Unknown   
+                 ┌──────────┬──────┴───────┬──────────┐
+                 ▼          ▼              ▼          ▼
+            parameter  parameter-      constant    unknown
+                       derived
+                 │          │              │          │
+                 ▼          ▼              ▼          ▼
+             Grounded   Grounded     Contradicted  Unknown   
 ```
 
 The possibilities are worth listing in full, because the distinctions between them are
@@ -166,13 +167,13 @@ here interprets; interpretation is the next stage, kept separate on purpose.
                             ▼
                     Verification rules
                             │
-                ┌───────────┼───────────┐
-                ▼           ▼           ▼
-            Marker      Expected     Timeout
-             found       effect       hit
-                │           │           │
-                ▼           ▼           ▼
-             Confirmed  Confirmed   Confirmed
+            ┌───────────┬───┴───┬───────────┐
+            ▼           ▼       ▼           ▼
+        Marker      Expected  Non-zero   Timeout
+         found       effect     exit       hit
+            │           │       │           │
+            ▼           ▼       ▼           ▼
+        Confirmed  Confirmed Confirmed  Confirmed
    
         
                 Any other outcome
@@ -228,8 +229,8 @@ nothing for any of it to act on.
 
 ## Why one case is enough
 
-A single finding shows the structure better than a diagram, because every branch the system can take is a branch it
-takes on something. Command injection grounded and confirmed, grounded and refuted, kept as an unknown and never
+A single finding shows the structure better than a list of its rules, because every branch the system can take is a
+branch it takes on something. Command injection grounded and confirmed, grounded and refuted, kept as an unknown and never
 fired, contradicted because the shell was not there, unsupported because the command was not there: each is a real
 exit, and a report is mostly an account of which exit was reached and on what evidence. The arrangement is not the
 model. It is what these stages do to one ordinary claim on its way from a guess to a line in a report, or to a

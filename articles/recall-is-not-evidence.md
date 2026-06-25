@@ -1,16 +1,16 @@
 # Recall is not evidence
 
-An earlier piece, [the model is not the system](model-is-not-system.md), argued that serious AI work had
-stopped being one capable model and become an arrangement: a generator proposes, something checks, execution
-decides, an audit layer remembers. A closing example was a vulnerability-research tool built on that separation.
-Enough has changed in it since to be worth a second look, less for the engineering than for what the engineering
-reveals about where arrangements of this kind tend to grow next.
+Two earlier pieces set this up. [The model is not the system](model-is-not-system.md) argued that serious AI work
+had stopped being one capable model and become an arrangement: a generator proposes, something checks, execution
+decides, an audit layer remembers. [An injection, stage by stage](an-injection-stage-by-stage.md) then followed one
+finding through every stage of vulnforge, the screen among them, where each proposal is weighed against the
+facts before anything is built or run.
 
-What grew is a part that sits between the proposing and the testing, and it earns its place by asking a question
+This piece returns to that screen for a narrower reason: what
+it reveals. The screen sits between the proposing and the testing, and earns its place by asking a question
 duller than a model is inclined to ask.
 
 ```
-
                  Static analysis
                        │
                        ▼
@@ -44,7 +44,7 @@ duller than a model is inclined to ask.
 
 ## An attack class is not present because it can be named
 
-The earlier piece put one observation at its hinge: a reasoning trace is not trustworthy because it exists. A
+The first piece put one observation at its hinge: a reasoning trace is not trustworthy because it exists. A
 fluent explanation can be wrong, so an explanation needs evaluating rather than reading. A close cousin of that
 observation turned up in practice, and is worth stating in the same shape: an attack class is not present in a piece
 of code because a model can name it.
@@ -81,7 +81,7 @@ is anything more than a word.
 
 ## An organ between propose and test
 
-The new part reads facts that a plain, non-AI pass has already pulled out of the code, with no model involved:
+The screen reads facts that a plain, non-AI pass has already pulled out of the code, with no model involved:
 every place it does one of those dangerous things, runs a command, opens a file, evaluates a string, hands data to
 something that deserialises. Those are the matching operations the classes need, the places where a shape could have
 somewhere to sit. And, for each of them, where the value arriving there came from, as far as a single reading of one
@@ -110,7 +110,7 @@ honesty lives.
             │          │
             ▼          ▼
      Unsupported   Mechanism
-                   impossible?
+                   contradicted?
                     │      │
                    Yes     No
                     │      │
@@ -128,7 +128,7 @@ honesty lives.
 Most of the work in that list is a single refusal: not to treat unknown as the same as safe. 
 
 ```
-              Trail reaches sink?
+           Trail reaches sink?
                     │
           ┌─────────┴─────────┐
           ▼                   ▼
@@ -151,7 +151,7 @@ same capped prior. A novel attack penalised can be recovered. A novel attack dis
 
 ## What changed in the arrangement
 
-In the language of the earlier piece, the arrangement gained an organ that does triage before the expensive
+In the language of the first piece, the screen does triage before the expensive
 witness. Execution is still the only thing that turns a finding from proposed to confirmed, and it is still the
 costly step: standing up an isolated environment, running code, watching what happens. Putting a cheap structural
 check ahead of it means the expensive witness is not called to rule on proposals that had nowhere to land in the
