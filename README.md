@@ -26,8 +26,7 @@ no API key.
 
 ## Context
 
-This is a PoC made in 2026 in the context of [The nuclear delusion](https://broomstick.tymyrddin.dev/posts/nuclear-delusion/) 
-The conceptual frame was made earlier and can be found in [The model is not the system](https://broomstick.tymyrddin.dev/posts/model-is-not-system/).
-
-The short version: AI reasoning research is increasingly converging on arrangements of subsystems rather than single
-models. vulnforge is one worked example of that convergence, applied to vulnerability research, but with fewer models.
+AI reasoning research is converging on arrangements of subsystems rather than single models. vulnforge is one worked
+example of that convergence, applied to vulnerability research, with fewer models. Three plain-language articles in
+[articles/](articles/README.md) tell the longer version, from the idea to the machinery to what changed, with no
+security or AI background assumed.
