@@ -122,6 +122,15 @@ and reachability checks. Those have not landed yet; the grounding gate was the
 move that answered the reviewer's critique, and the others can follow as the
 attack-type predicate registry grows.
 
+Naming note: the landed reason enum is `ScreenReason` in `schema/screen.py`, not
+`ScreenFailure` as the draft below calls it. It carries eight values grouped by
+grounding state: `param_reaches_sink` (grounded); `sink_source_unresolved`,
+`insufficient_sql_evidence`, `attack_type_unrecognised`, `screen_other` (unknown);
+`shell_metachars_under_shell_false`, `constant_sink_arg` (contradicted); and
+`no_matching_sink` (unsupported). Every reason carries a grounding state, so a
+rejection records why it was rejected, not only that it was. `ScreenFailure` below
+is the earlier draft name, kept for the history.
+
 Checks from the original sketch, deterministic and cheap:
 
 - Location resolves. `Hypothesis.location` is a file path with an
@@ -256,6 +265,11 @@ becomes visible.
 The reports stay per-run by default. Aggregation is an opt-in
 command and reads only from disk; no global state, no daemon, no
 sidecar.
+
+The grounding-distribution metrics in `docs/roadmap.md` ("Measuring the grounding
+distribution") are the first concrete consumer of this loop: `vulnforge stats` walks
+`runs/*/` for the fact-level provenance coverage and the verdict-level grounding
+distribution. The two are read together because each measures a different layer.
 
 ## Sequencing
 
