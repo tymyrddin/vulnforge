@@ -1,9 +1,8 @@
 """CVE index: load the offline OSV dump and match findings by CWE.
 
-The primary data source is the OSV.dev PyPI ecosystem dump, downloaded by
-bootstrap/fetch_cve.py. db.gcve.eu (CIRCL Luxembourg) uses the same OSV
-format and slots in as the primary source once a confirmed bulk-download URL
-is available.
+The data source is db.gcve.eu (CIRCL, Luxembourg): the PyPA Python advisory
+database (`pysec`) in OSV format, downloaded by bootstrap/fetch_cve.py and
+split into one .json per record.
 
 Each .json file in the dump follows the OSV schema:
   {

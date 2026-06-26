@@ -1,13 +1,14 @@
 # Grounding metrics: first real scan
 
-A record of the first measured scan on a real corpus, with the data and what it
-does and does not show. The corpus is the repository's own pipeline code under
-`stages/`, which is a fair self-test: vulnforge is asked to find vulnerabilities in
-the very stages that decide what counts as a vulnerability.
+A record of the first measured scan on a real corpus, with the data and what it does
+and does not show. The corpus is the repository's own pipeline code under `stages/`, a
+self-test: vulnforge is asked to find vulnerabilities in the very stages that decide
+what counts as a vulnerability.
 
 This is a single data point, not a benchmark. The interpretations below hold for this
-corpus and this run; the pinned-corpus plan in `docs/roadmap.md` is what turns points
-like this into a series.
+corpus and this run; the pinned-corpus plan in
+[../roadmap/README.md](../roadmap/README.md) turns points like this into a series. The
+two metrics are defined in [README.md](README.md).
 
 ## Run identity
 
@@ -40,8 +41,8 @@ Reproduce: `vulnforge scan stages/`, then walk the run's `index_latest` slices a
 model once per slice, so it owns nearly all of the roughly two-and-three-quarter-hour
 wall clock. Everything downstream is either deterministic code over in-memory manifests
 (screen, verify, report run in milliseconds) or scales with accepted hypotheses rather
-than slices. The screen gate dropping 61 to 1 is what cut synthesise from a potential
-61 model calls to 1, and saved the matching container launches in execute.
+than slices. The screen gate dropping 61 to 1 cut synthesise from a potential 61 model
+calls to 1, and saved the matching container launches in execute.
 
 ## Metric 1: fact-level provenance coverage
 
@@ -54,12 +55,12 @@ unknown:  5/5  (100.0%)
 ```
 
 `stages/` carries no subprocess and no dangerous-sink facts at all: the stage code
-shells out nothing, evals nothing, deserialises nothing untrusted. The only source-to-
-sink surface present is five file paths, and all five resolve to `unknown`. They reach
-`open()` and Path methods through object-store handles and helper-call returns, not
-through a bare or interpolated parameter, which is exactly the frontier the single-
-function AST pass does not cross. The resolver reports `unknown` rather than guessing,
-which is the honest answer: analysis stopped, not "no taint".
+shells out nothing, evals nothing, deserialises nothing untrusted. The only
+source-to-sink surface present is five file paths, and all five resolve to `unknown`.
+They reach `open()` and Path methods through object-store handles and helper-call
+returns, not through a bare or interpolated parameter, which is the frontier the
+single-function AST pass does not cross. The resolver reports `unknown` rather than
+guessing: analysis stopped, not "no taint".
 
 The question Metric 1 answers: can the extractor resolve provenance on the attack
 surface that actually exists? On this corpus, not yet, 0 of 5.
@@ -74,19 +75,18 @@ accepted:   1  (synthesise.py::run, attack_type "data leakage",
                 grounding unknown, effective_confidence 0.35)
 ```
 
-The model proposed roughly fifty distinct free-text `attack_type` strings across the
-61 hypotheses, heavily synonymous: "Command injection" four times plus "command
-injection" plus "Command injection via shell metacharacters"; "Code injection" in about
-eight variants; deserialisation in four spellings. Broad recall, ungrounded in the
-slice. This is static-pattern enthusiasm in its pure form, and the corpus to find it in
-is the one place that catalogues every trope by name.
+The model proposed roughly fifty distinct free-text `attack_type` strings across the 61
+hypotheses, heavily synonymous: "Command injection" four times plus "command injection"
+plus "Command injection via shell metacharacters"; "Code injection" in about eight
+variants; deserialisation in four spellings. Broad recall, ungrounded in the slice.
+This is static-pattern enthusiasm, on a corpus that catalogues every trope by name.
 
 The question Metric 2 answers: can the system stop attack-category pattern matching from
 becoming accepted output? On this corpus, yes, 60 of 61 removed.
 
 ## What the distribution shape shows
 
-The strongest result here is not "1 accepted, 60 rejected". It is the shape:
+The shape of the result, beyond "1 accepted, 60 rejected":
 
 ```text
 unsupported  60
@@ -96,11 +96,10 @@ unknown       1
 ```
 
 A merely sceptical filter would produce a mixture of contradicted and unsupported.
-Instead almost everything landed in unsupported, which is the reviewer's diagnosis made
-visible: the dominant failure mode is attack classes proposed where the required attack
-surface does not exist in the slice facts at all. The model is not getting the mechanism
-subtly wrong on a real sink (that would be contradicted); it is naming sinks that are
-not there.
+Instead almost everything landed in unsupported. The dominant failure mode is attack
+classes proposed where the required attack surface does not exist in the slice facts at
+all. The model is not getting the mechanism subtly wrong on a real sink (that would be
+contradicted); it is naming sinks that are not there.
 
 ## The mapping carries information, not just confidence
 
@@ -119,13 +118,12 @@ command injection  proposed against code with no subprocess sink at all
 
 Now it does. The 60 unsupported verdicts are evidence that the attack-type to sink
 mapping is carrying real information, not merely down-ranking a confidence number. A
-class with no matching surface is removed, not quietly kept at a lower prior.
+class with no matching surface is removed, not kept at a lower prior.
 
 ## The survivor is unassessable, not supported
 
-One care point, correcting a loose earlier reading. The single survivor is an artefact
-of the "unknown rather than silently reject" policy, not a hypothesis the evidence
-backed. The precise statement is:
+The single survivor is an artefact of the "unknown rather than silently reject" policy,
+not a hypothesis the evidence backed. Precisely:
 
 ```text
 61 hypotheses
@@ -134,9 +132,9 @@ backed. The precise statement is:
 ```
 
 The survivor did not survive because anything grounded it. It survived because the
-system chooses not to reject a novel class on missing taxonomy coverage alone, and holds
-it at a capped 0.35 prior instead. Grounding never had a chance to fire on it; it was
-blocked from assessment one step earlier, at the registry.
+system does not reject a novel class on missing taxonomy coverage alone, and holds it at
+a capped 0.35 prior instead. Grounding never fired on it; it was blocked from assessment
+one step earlier, at the registry.
 
 ## Two orthogonal findings
 
@@ -154,9 +152,9 @@ independently.
 
 ## Reading for next time
 
-This run is arguably the first evidence that the attack-type registry is now part of the
-system's effective precision boundary, alongside the extractor. If a later run shows too
-many `unknown` survivors, the first place to look is registry coverage, before provenance
+This run is the first evidence that the attack-type registry is part of the system's
+effective precision boundary, alongside the extractor. If a later run shows too many
+`unknown` survivors, the first place to look is registry coverage, before provenance
 extraction: in this run the one survivor was blocked from assessment by taxonomy, not by
 provenance.
 
@@ -168,5 +166,8 @@ The data is internally consistent with the architecture:
 - provenance grounding has had little opportunity to fire, because the corpus contains
   very few provenance-bearing attack surfaces for it to act on.
 
-A corpus with real subprocess and deserialisation sinks would put grounded, contradicted
-and the provenance resolver to work, which is the next data point worth gathering.
+A corpus with real subprocess and deserialisation sinks would put grounded,
+contradicted and the provenance resolver to work, the next data point to gather. The
+decisions behind these states are recorded in
+[../decisions/2026-06-24-grounding-screen.md](../decisions/2026-06-24-grounding-screen.md);
+the calibration question is open in [../roadmap/README.md](../roadmap/README.md).

@@ -18,15 +18,55 @@ traced back to exactly what produced it.
 It runs on what you already have. Local open-source models on a normal workstation. No cloud bill, no vendor dependency,
 no API key.
 
+## Install
+
+Requirements:
+
+- Linux with rootless podman on PATH. Ubuntu 24.04 is the tested baseline.
+- x86_64 CPU with AVX2 (a llama.cpp requirement).
+- Around 11 GiB free disk: weights (~10 GiB), the sandbox image and build cache, and the CVE data (the PyPA advisory
+  dump from db.gcve.eu).
+- 16 GiB RAM works well. The default Qwen 7B inference runs in an 8 GiB cgroup (around 5 GiB resident).
+- Network for the bootstrap step only. The analysis host can be offline afterwards.
+
+In an activated venv:
+
+```
+pip install -e .
+vulnforge bootstrap        # fetch weights, build the sandbox image (online, one-off)
+```
+
+The cgroup caps live in `inference/runner.py` and `sandbox/run.py`, adjustable for the hardware in front of you.
+
+## Usage
+
+```
+vulnforge scan path/to/repo                    # run the staged pipeline (offline)
+vulnforge probe path/to/file --function NAME   # one-shot hypothesis against a single function
+vulnforge plumbing                             # end-to-end smoke test
+vulnforge audit-verify --workspace <dir>       # walk a run's audit log hash chain
+```
+
+`probe` runs one file through index, hypothesise, and the grounding screen, the same stages a scan uses up to that
+point, and skips synthesise, execute, verify, and report. It exercises the prompt, schema, and grounding layers
+without spending a payload synthesis or a container launch, and writes per-failure-layer artefacts (prompt, raw output,
+parsed JSON, rejections, and the grounding per hypothesis). `--function NAME` focuses on one function and keeps it
+representative of a real run; without it, probe runs each function in the file, and falls back to the raw file only when
+no functions are found. Rootless podman prints harmless `can't raise ambient capability` warnings (the sandbox drops
+every capability anyway). To see llama.cpp's own load and timing logs for a probe run, pass `--debug-llama`. The
+`LLAMA_TAG` in `sandbox/Containerfile` pins the llama.cpp release, so bump it with intent.
+
 ## Docs
 
-- For installation, usage, repo layout, and architecture detail, see [technical docs](docs/technical/README.md).
-- For the load-bearing design decisions and the reasoning behind them, see [the project's institutional memory](docs/memory/)
-- What we're building next can be found in the [roadmap](docs/roadmap.md)
+- [architecture/](docs/architecture/): what exists, the stages, schema, sandbox, and how a scan flows.
+- [decisions/](docs/decisions/): why it is built this way, one dated record each.
+- [roadmap/](docs/roadmap/): what might come next.
+- [metrics/](docs/metrics/): what real runs measured.
+
+To contribute, see [docs/contributing.md](docs/contributing.md).
 
 ## Context
 
 AI reasoning research is converging on arrangements of subsystems rather than single models. vulnforge is one worked
-example of that convergence, applied to vulnerability research, with fewer models. Three plain-language articles in
-[articles/](articles/README.md) tell the longer version, from the idea to the machinery to what changed, with no
-security or AI background assumed.
+example of that convergence, applied to vulnerability research, with fewer models. Three non-technical articles in
+[articles/](articles/README.md) hold the longer version.
