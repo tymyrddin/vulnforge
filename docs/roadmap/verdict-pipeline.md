@@ -54,6 +54,10 @@ Closed enum draft for `VerificationFailure`:
 
 The enum stays closed. An open enum is prose with extra steps.
 
+Unbuilt. The `expected_outcome` on `Hypothesis` (replacing free-text
+`expected_effect`) and the process-exit `VerificationFailure` draft above are the
+remaining work.
+
 ## Move 3: confirm content-addressed references end to end
 
 The store is already content-addressed. The remaining check is that every `_ref` field

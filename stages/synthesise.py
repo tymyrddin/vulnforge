@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from pathlib import Path
+from importlib.resources import files
 from typing import Any
 
 from audit.log import append as audit_append
@@ -17,7 +17,7 @@ from schema.audit_event import AuditEvent
 from store import objects, refs
 from workspace import active as active_workspace
 
-_PROMPT_PATH = Path("inference/prompts/seed_payloads.txt")
+_PROMPT_PATH = files("inference") / "prompts" / "seed_payloads.txt"
 
 _MARKER_INJECT_TYPES = frozenset({"command_injection"})
 

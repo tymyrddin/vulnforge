@@ -8,7 +8,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import time
-from pathlib import Path
+from importlib.resources import files
 from typing import Any
 
 from audit.log import append as audit_append
@@ -20,7 +20,7 @@ from schema.hypothesis import EvidenceType, Hypothesis, VerificationStatus
 from store import objects, refs
 from workspace import active as active_workspace
 
-_PROMPT_PATH = Path("inference/prompts/hypothesise.txt")
+_PROMPT_PATH = files("inference") / "prompts" / "hypothesise.txt"
 
 
 def run(slices_ref: str, *, model_alias: str, seed: int, max_tokens: int = 512) -> str:

@@ -27,5 +27,4 @@ when.
 - [2026-06-23-no-think-model-config.md](2026-06-23-no-think-model-config.md): /no_think as model config, because thinking traces blow the per-slice timeout on CPU.
 - [2026-06-24-grounding-screen.md](2026-06-24-grounding-screen.md): the taint-grounding screen stage and its four grounding states.
 - [2026-06-25-two-metrics.md](2026-06-25-two-metrics.md): provenance coverage and grounding distribution kept deliberately apart.
-- [2026-06-26-semantic-evidence-substrate.md](2026-06-26-semantic-evidence-substrate.md): one fact substrate with security, safety, and compliance as lenses, the same shape on observations, plug-in per layer, and thin-vertical-first for the OT/ICS direction.
 - [threat-model.md](threat-model.md): what the design removes from the trust path, and what it does not.

@@ -5,12 +5,8 @@ already exists is in [../architecture/](../architecture/); why those things were
 built the way they were is in [../decisions/](../decisions/); what a real scan
 produced is in [../metrics/README.md](../metrics/README.md).
 
-Three forward-looking design notes live beside this index:
+Two forward-looking design notes live beside this index:
 
-- [ot-ics-direction.md](ot-ics-direction.md): the OT/ICS direction, facts as a
-  semantic evidence substrate, and the first firmware vertical to build. Its
-  architectural calls are settled in
-  [../decisions/2026-06-26-semantic-evidence-substrate.md](../decisions/2026-06-26-semantic-evidence-substrate.md).
 - [verdict-pipeline.md](verdict-pipeline.md): the unbuilt moves of the verdict
   pipeline (closed-enum outcomes, end-to-end ref verification, the correlation loop).
 - [run-concept.md](run-concept.md): a deferred `Run` vs `Workspace` separation.
@@ -43,15 +39,13 @@ These items are scoped but not built. Priority is a rough ordering, not a commit
 
 ## Immediate priorities
 
-The OT/ICS direction in [ot-ics-direction.md](ot-ics-direction.md) sets the lead: one
-firmware vertical driven to CONFIRMED. The numbered items below are the
-language-neutral spine that direction builds on.
+The numbered items below are the immediate spine.
 
 1. Run on code with real surface. The only end-to-end run so far is `stages/`, which
    has almost no sinks, so the grounded, contradicted, and confirmed paths have never
    fired. A corpus with real command-running, file-handling, and untrusted-input
    parsing exercises them, and produces the confirmations the policy-calibration
-   question (Open questions) needs. The firmware vertical is the chosen concrete form.
+   question (Open questions) needs.
 2. Model management CLI (Backlog: High).
 3. Tune the hypothesise and synthesise prompts against real results.
 4. First new-language extractor, JavaScript (Backlog: Multi-language support).

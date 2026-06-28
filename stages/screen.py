@@ -237,29 +237,6 @@ def _resolve(
     return Grounding.UNSUPPORTED, ScreenReason.NO_MATCHING_SINK
 
 
-def ground_safety_operation(
-    facts: list[dict[str, Any]], role: str
-) -> tuple[Grounding, ScreenReason, list[int]]:
-    """Safety lens over the same fact substrate as the vulnerability path.
-
-    The vulnerability lens asks "can attacker-controlled input reach this sink?"
-    and grades by provenance. The safety lens asks "did an operation occur on a
-    safety-critical resource?" and needs no taint predicate: a register_write fact
-    whose resolved peripheral role matches grounds the operation on its own.
-
-    Returns the grounding, its reason, and the addresses that grounded it (the
-    predicted writes the verify stage compares observed writes against).
-    """
-    matching = [
-        f for f in facts
-        if f.get("type") == "register_write" and f.get("role") == role
-    ]
-    if not matching:
-        return Grounding.UNSUPPORTED, ScreenReason.NO_MATCHING_SINK, []
-    addresses = sorted({int(f["address"]) for f in matching})
-    return Grounding.GROUNDED, ScreenReason.SAFETY_OPERATION_PRESENT, addresses
-
-
 def _relies_on_shell_metacharacters(inputs: list[str]) -> bool:
     return any(any(c in s for c in _SHELL_METACHARS) for s in inputs)
 

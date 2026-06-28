@@ -115,33 +115,6 @@ def run(observations_ref: str, hypotheses_ref: str) -> str:  # noqa: ARG001
     return verdicts_ref
 
 
-def verify_firmware(
-    predicted_addresses: list[int], observation: dict[str, Any]
-) -> dict[str, Any]:
-    """Deterministic comparator for the firmware vertical.
-
-    Predicted register writes (from the grounded facts) against the writes the
-    emulator actually observed. This is the firmware counterpart of the
-    AI-cannot-judge rule: the only place a firmware verdict reaches CONFIRMED is
-    here, alongside the Python path's two assignment sites.
-    """
-    observed = {int(w["address"]) for w in observation.get("writes", [])}
-    hits = sorted(set(predicted_addresses) & observed)
-    if hits:
-        status = Status.CONFIRMED
-        evidence = "observed write(s) to " + ",".join(f"0x{a:08x}" for a in hits)
-    else:
-        status = Status.REFUTED
-        evidence = "no observed write to any predicted register"
-    return {
-        "status": status.value,
-        "evidence": evidence,
-        "predicted_addresses": sorted(set(predicted_addresses)),
-        "observed_addresses": sorted(observed),
-        "hits": hits,
-    }
-
-
 def _decide(obs: dict[str, Any], h: Hypothesis) -> tuple[str, str]:
     exit_code: int = obs.get("exit_code", 0)
     timed_out: bool = obs.get("timed_out", False)

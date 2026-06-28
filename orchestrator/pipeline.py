@@ -9,18 +9,18 @@ are retained explicitly rather than assuming a purely linear chain.
 """
 from __future__ import annotations
 
+from importlib.resources import files
 from pathlib import Path
 
 import yaml
 
 from stages import execute, hypothesise, index, ingest, report, screen, synthesise, verify
 
-CONFIG_PATH = Path("configs/pipeline.yaml")
 
-
-def run(repo_path: Path, config_path: Path = CONFIG_PATH) -> None:
-    config = yaml.safe_load(config_path.read_text())
-    stages_cfg = {s["name"]: s for s in config.get("stages", [])}
+def run(repo_path: Path, config_path: Path | None = None) -> None:
+    # Default config is package data, located independent of the working directory.
+    source = config_path if config_path is not None else files("configs") / "pipeline.yaml"
+    config = yaml.safe_load(source.read_text())
 
     ingest_ref: str | None = None
     slices_ref: str | None = None

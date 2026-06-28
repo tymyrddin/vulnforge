@@ -52,10 +52,6 @@ class Grounding(str, Enum):
 class ScreenReason(str, Enum):
     # grounded
     PARAM_REACHES_SINK = "param_reaches_sink"
-    # grounded (safety lens): an operation on a safety-critical resource, taint
-    # not required. The vulnerability lens asks whether an attacker can reach the
-    # operation; the safety lens asks only whether it occurred on such a resource.
-    SAFETY_OPERATION_PRESENT = "safety_operation_present"
     # unknown
     SINK_SOURCE_UNRESOLVED = "sink_source_unresolved"
     INSUFFICIENT_SQL_EVIDENCE = "insufficient_sql_evidence"
