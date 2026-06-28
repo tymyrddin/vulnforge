@@ -5,6 +5,7 @@ Grep for `status=Status.CONFIRMED` (or REFUTED) and you find exactly the two
 lines below. That is the entire enforcement of the "AI cannot be the judge"
 rule: the only assignment sites for verdict statuses are in this file.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -77,10 +78,7 @@ def run(observations_ref: str, hypotheses_ref: str) -> str:  # noqa: ARG001
                 continue
 
         try:
-            if verdict_str == "CONFIRMED":
-                final_h = confirm(h, evidence)
-            else:
-                final_h = refute(h, evidence)
+            final_h = confirm(h, evidence) if verdict_str == "CONFIRMED" else refute(h, evidence)
         except ValueError:
             skipped += 1
             continue
@@ -103,15 +101,17 @@ def run(observations_ref: str, hypotheses_ref: str) -> str:  # noqa: ARG001
     manifest_bytes = json.dumps(verdicts, sort_keys=True, separators=(",", ":")).encode()
     verdicts_ref = objects.put(manifest_bytes)
     refs.write("verdicts_latest", verdicts_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="verify",
-        input_refs=(observations_ref,),
-        output_refs=(verdicts_ref,),
-        model_hash=None,
-        seed=None,
-        summary=f"{len(verdicts)} verdicts, {skipped} skipped",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="verify",
+            input_refs=(observations_ref,),
+            output_refs=(verdicts_ref,),
+            model_hash=None,
+            seed=None,
+            summary=f"{len(verdicts)} verdicts, {skipped} skipped",
+        )
+    )
     return verdicts_ref
 
 

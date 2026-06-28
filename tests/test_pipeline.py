@@ -3,6 +3,7 @@
 Run with pytest -s to see stage-by-stage output from the integration test.
 The unit tests run without podman or weights and should always pass quickly.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,12 +16,13 @@ import pytest
 from bootstrap import build_sandbox
 from stages import execute, hypothesise, index, ingest, report, screen, synthesise, verify
 from store import objects
-from workspace import new_run, use as use_workspace
-
+from workspace import new_run
+from workspace import use as use_workspace
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _image_hash() -> str | None:
     try:
@@ -38,6 +40,7 @@ skip_if_not_bootstrapped = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Unit tests: parsing, independent of the model and sandbox
 # ---------------------------------------------------------------------------
+
 
 def test_extract_json_picks_last_valid_blob():
     """When the model echoes the prompt schema before its own response,
@@ -89,6 +92,7 @@ Hard rules:
 def test_placeholder_gate_accepts_expressions():
     """Payloads with parentheses, dots, slashes are accepted."""
     from schema.hypothesis import _is_placeholder
+
     for value in [
         "__import__('os').system('id')",
         "$(id)",
@@ -106,6 +110,7 @@ def test_placeholder_gate_accepts_expressions():
 def test_placeholder_gate_rejects_templates():
     """Template tokens are rejected."""
     from schema.hypothesis import _is_placeholder
+
     for value in [
         "<payload>",
         "{command}",
@@ -160,10 +165,12 @@ def test_parse_hypotheses_invalid_evidence_type_skipped():
 # Screen stage: deterministic grounding, no model or sandbox
 # ---------------------------------------------------------------------------
 
+
 def _put_slice(facts, imports):
     blob = json.dumps(
         {"security_facts": facts, "imports": imports},
-        sort_keys=True, separators=(",", ":"),
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode()
     return objects.put(blob)
 
@@ -171,7 +178,8 @@ def _put_slice(facts, imports):
 def _put_hyp(attack_type, inputs, confidence):
     blob = json.dumps(
         {"attack_type": attack_type, "suggested_inputs": inputs, "confidence": confidence},
-        sort_keys=True, separators=(",", ":"),
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode()
     return objects.put(blob)
 
@@ -186,17 +194,33 @@ def test_screen_rejects_contradicted_keeps_unknown_capped() -> None:
         # the only matching sink contradicts the mechanism.
         cleanup_id = "app.py::cleanup"
         cleanup_ref = _put_slice(
-            facts=[{"type": "subprocess", "shell": False, "argv_style": "list", "arg_source": "constant"}],
+            facts=[
+                {
+                    "type": "subprocess",
+                    "shell": False,
+                    "argv_style": "list",
+                    "arg_source": "constant",
+                }
+            ],
             imports=["import subprocess"],
         )
         # Slice with a single sink whose argument the AST cannot follow.
         run_id = "app.py::run"
         run_ref = _put_slice(
-            facts=[{"type": "subprocess", "shell": "unknown", "argv_style": "unknown", "arg_source": "unknown"}],
+            facts=[
+                {
+                    "type": "subprocess",
+                    "shell": "unknown",
+                    "argv_style": "unknown",
+                    "arg_source": "unknown",
+                }
+            ],
             imports=["import subprocess"],
         )
         slices_ref = objects.put(
-            json.dumps({cleanup_id: cleanup_ref, run_id: run_ref}, sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(
+                {cleanup_id: cleanup_ref, run_id: run_ref}, sort_keys=True, separators=(",", ":")
+            ).encode()
         )
 
         contradicted_id = f"{cleanup_id}::0"
@@ -278,9 +302,7 @@ def test_execute_harness_exception_captured() -> None:
     """An exception inside the target function → exit=1 and traceback in stderr."""
     with tempfile.TemporaryDirectory() as tmpdir:
         use_workspace(new_run(base=Path(tmpdir)))
-        obs = execute._run_payload(
-            _HARNESS_TARGET, "x", "p0", "target.py::always_raises::0", 30
-        )
+        obs = execute._run_payload(_HARNESS_TARGET, "x", "p0", "target.py::always_raises::0", 30)
     assert obs["exit_code"] == 1
     assert "RuntimeError" in obs["stderr"]
     assert "deliberate failure" in obs["stderr"]
@@ -291,9 +313,7 @@ def test_execute_harness_missing_function() -> None:
     """A hyp_id that names a non-existent function exits with code 2."""
     with tempfile.TemporaryDirectory() as tmpdir:
         use_workspace(new_run(base=Path(tmpdir)))
-        obs = execute._run_payload(
-            _HARNESS_TARGET, "x", "p0", "target.py::no_such_fn::0", 30
-        )
+        obs = execute._run_payload(_HARNESS_TARGET, "x", "p0", "target.py::no_such_fn::0", 30)
     assert obs["exit_code"] == 2
 
 
@@ -302,9 +322,7 @@ def test_execute_harness_multi_param_function() -> None:
     """A function with multiple parameters gets the payload as the first arg."""
     with tempfile.TemporaryDirectory() as tmpdir:
         use_workspace(new_run(base=Path(tmpdir)))
-        obs = execute._run_payload(
-            _HARNESS_TARGET, "hello", "p0", "target.py::add::0", 30
-        )
+        obs = execute._run_payload(_HARNESS_TARGET, "hello", "p0", "target.py::add::0", 30)
     assert obs["exit_code"] == 0, obs["stderr"]
     assert "'hello'" in obs["stdout"]
 
@@ -314,9 +332,7 @@ def test_execute_harness_timeout() -> None:
     """A function that loops forever hits the timeout; timed_out is True and exit_code is 124."""
     with tempfile.TemporaryDirectory() as tmpdir:
         use_workspace(new_run(base=Path(tmpdir)))
-        obs = execute._run_payload(
-            _HARNESS_TARGET, "x", "p0", "target.py::infinite_loop::0", 3
-        )
+        obs = execute._run_payload(_HARNESS_TARGET, "x", "p0", "target.py::infinite_loop::0", 3)
     assert obs["timed_out"] is True
     assert obs["exit_code"] == 124
 
@@ -324,6 +340,7 @@ def test_execute_harness_timeout() -> None:
 # ---------------------------------------------------------------------------
 # Integration test: full pipeline with real model and sandbox
 # ---------------------------------------------------------------------------
+
 
 @skip_if_not_bootstrapped
 def test_pipeline_end_to_end() -> None:
@@ -355,8 +372,8 @@ def safe_function(data):
         assert slices, "no slices extracted"
 
         # hypothesise
-        hyp_model = "plumbing-check"   # production: qwen3-8b
-        syn_model = "plumbing-check"   # production: qwen2.5-coder-7b
+        hyp_model = "plumbing-check"  # production: qwen3-8b
+        syn_model = "plumbing-check"  # production: qwen2.5-coder-7b
         hypotheses_ref = hypothesise.run(slices_ref, model_alias=hyp_model, seed=42)
         hyp_manifest = json.loads(objects.get(hypotheses_ref))
         print(f"\nhypothesise: {len(hyp_manifest)} hypotheses")
@@ -367,8 +384,7 @@ def safe_function(data):
             print(f"    confidence  : {h.get('confidence')}")
             print(f"    evidence    : {h.get('evidence_type')}")
         assert hyp_manifest, (
-            f"0 hypotheses from {len(slices)} slices — "
-            f"check model logs in {ws.logs_dir}"
+            f"0 hypotheses from {len(slices)} slices — check model logs in {ws.logs_dir}"
         )
 
         # synthesise
@@ -403,9 +419,7 @@ def safe_function(data):
             if "safe_function" in oid
         ]
         for o in safe_obs:
-            assert o["exit_code"] == 0, (
-                f"safe_function raised unexpectedly: {o['stderr']}"
-            )
+            assert o["exit_code"] == 0, f"safe_function raised unexpectedly: {o['stderr']}"
             assert o["stdout"].strip(), "safe_function returned nothing to stdout"
 
         # verify
@@ -417,14 +431,15 @@ def safe_function(data):
             v = json.loads(objects.get(vref))
             label = v.get("verdict", "?")
             (confirmed if label == "CONFIRMED" else refuted).append(hid)
-        print(f"\nverify: {len(confirmed)} confirmed, {len(verdict_manifest) - len(confirmed)} refuted")
+        print(
+            f"\nverify: {len(confirmed)} confirmed, "
+            f"{len(verdict_manifest) - len(confirmed)} refuted"
+        )
         for hid in confirmed:
             vref = verdict_manifest[hid]
             v = json.loads(objects.get(vref))
             print(f"  {hid}: CONFIRMED ({v.get('evidence', '')})")
-        assert len(verdict_manifest) == len(hyp_manifest), (
-            "every hypothesis must receive a verdict"
-        )
+        assert len(verdict_manifest) == len(hyp_manifest), "every hypothesis must receive a verdict"
         safe_verdicts = [
             json.loads(objects.get(vref))
             for hid, vref in verdict_manifest.items()

@@ -16,6 +16,7 @@ A hypothesis is mapped back to its slice by id: hypothesise keys each hypothesis
 ``<slice_id>::<idx>``, so the slice id is the hypothesis id with its last segment
 stripped.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -34,37 +35,75 @@ from schema.screen import (
 from store import objects, refs
 
 # Attack-class synonyms, normalised to lower_snake_case (spaces -> underscores).
-_COMMAND = frozenset({
-    "command_injection", "os_command_injection", "shell_injection",
-    "argument_injection", "command_execution",
-})
-_CODE = frozenset({
-    "code_execution", "code_injection", "arbitrary_code_execution",
-    "remote_code_execution", "rce",
-})
-_DESERIALIZATION = frozenset({
-    "deserialization", "insecure_deserialization", "unsafe_deserialization",
-    "pickle_injection",
-})
-_PATH = frozenset({
-    "path_traversal", "directory_traversal", "arbitrary_file_read",
-    "arbitrary_file_write", "file_read", "file_write",
-    "arbitrary_file_access", "file_disclosure",
-})
+_COMMAND = frozenset(
+    {
+        "command_injection",
+        "os_command_injection",
+        "shell_injection",
+        "argument_injection",
+        "command_execution",
+    }
+)
+_CODE = frozenset(
+    {
+        "code_execution",
+        "code_injection",
+        "arbitrary_code_execution",
+        "remote_code_execution",
+        "rce",
+    }
+)
+_DESERIALIZATION = frozenset(
+    {
+        "deserialization",
+        "insecure_deserialization",
+        "unsafe_deserialization",
+        "pickle_injection",
+    }
+)
+_PATH = frozenset(
+    {
+        "path_traversal",
+        "directory_traversal",
+        "arbitrary_file_read",
+        "arbitrary_file_write",
+        "file_read",
+        "file_write",
+        "arbitrary_file_access",
+        "file_disclosure",
+    }
+)
 _SQL = frozenset({"sql_injection", "sqli", "sql"})
 
 _CODE_SINK_NAMES = frozenset({"eval", "exec", "compile"})
-_DESERIALIZATION_SINK_NAMES = frozenset({
-    "pickle.loads", "pickle.load", "yaml.load", "marshal.loads", "marshal.load",
-})
+_DESERIALIZATION_SINK_NAMES = frozenset(
+    {
+        "pickle.loads",
+        "pickle.load",
+        "yaml.load",
+        "marshal.loads",
+        "marshal.load",
+    }
+)
 _OS_SHELL_SINK_NAMES = frozenset({"os.system", "os.popen"})
 
 # Substrings that hint a slice imports a database or SQL library. Deliberately a weak
 # signal: a hit only lifts a SQL hypothesis to UNKNOWN, never to grounded.
 _DB_IMPORT_HINTS = (
-    "sqlite3", "sqlalchemy", "psycopg", "pymysql", "mysql", "asyncpg",
-    "aiosqlite", "sqlmodel", "peewee", "pyodbc", "cx_oracle", "mariadb",
-    "django.db", "sql",
+    "sqlite3",
+    "sqlalchemy",
+    "psycopg",
+    "pymysql",
+    "mysql",
+    "asyncpg",
+    "aiosqlite",
+    "sqlmodel",
+    "peewee",
+    "pyodbc",
+    "cx_oracle",
+    "mariadb",
+    "django.db",
+    "sql",
 )
 
 # Characters whose effect depends on a shell interpreting the command line.
@@ -100,27 +139,26 @@ def run(hypotheses_ref: str, slices_ref: str) -> tuple[str, str]:
         if is_accepted:
             accepted[hyp_id] = hyp_ref
 
-    accepted_ref = objects.put(
-        json.dumps(accepted, sort_keys=True, separators=(",", ":")).encode()
-    )
-    verdicts_ref = objects.put(
-        json.dumps(verdicts, sort_keys=True, separators=(",", ":")).encode()
-    )
+    accepted_ref = objects.put(json.dumps(accepted, sort_keys=True, separators=(",", ":")).encode())
+    verdicts_ref = objects.put(json.dumps(verdicts, sort_keys=True, separators=(",", ":")).encode())
     refs.write("screen_accepted_latest", accepted_ref)
     refs.write("screen_verdicts_latest", verdicts_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="screen",
-        input_refs=(hypotheses_ref, slices_ref),
-        output_refs=(accepted_ref, verdicts_ref),
-        model_hash=None,
-        seed=None,
-        summary=(
-            f"{len(accepted)}/{len(hyp_manifest)} accepted "
-            f"(grounded={counts[Grounding.GROUNDED]}, unknown={counts[Grounding.UNKNOWN]}, "
-            f"contradicted={counts[Grounding.CONTRADICTED]}, unsupported={counts[Grounding.UNSUPPORTED]})"
-        ),
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="screen",
+            input_refs=(hypotheses_ref, slices_ref),
+            output_refs=(accepted_ref, verdicts_ref),
+            model_hash=None,
+            seed=None,
+            summary=(
+                f"{len(accepted)}/{len(hyp_manifest)} accepted "
+                f"(grounded={counts[Grounding.GROUNDED]}, unknown={counts[Grounding.UNKNOWN]}, "
+                f"contradicted={counts[Grounding.CONTRADICTED]}, "
+                f"unsupported={counts[Grounding.UNSUPPORTED]})"
+            ),
+        )
+    )
     return accepted_ref, verdicts_ref
 
 
@@ -173,26 +211,31 @@ def _grounding(
     return _resolve(graded)
 
 
-def _matching_sinks(
-    klass: str, facts: list[dict[str, Any]]
-) -> list[dict[str, Any]] | None:
+def _matching_sinks(klass: str, facts: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
     """Facts that count as a sink for this attack class. None means the class is
     unrecognised (no detector), distinct from [] meaning recognised but no such sink."""
     if klass in _COMMAND:
         return [
-            f for f in facts
+            f
+            for f in facts
             if f.get("type") == "subprocess"
-            or (f.get("type") == "dangerous_sink"
-                and (f.get("name") in _OS_SHELL_SINK_NAMES or "shell=True" in str(f.get("name", ""))))
+            or (
+                f.get("type") == "dangerous_sink"
+                and (
+                    f.get("name") in _OS_SHELL_SINK_NAMES or "shell=True" in str(f.get("name", ""))
+                )
+            )
         ]
     if klass in _CODE:
         return [
-            f for f in facts
+            f
+            for f in facts
             if f.get("type") == "dangerous_sink" and f.get("name") in _CODE_SINK_NAMES
         ]
     if klass in _DESERIALIZATION:
         return [
-            f for f in facts
+            f
+            for f in facts
             if f.get("type") == "dangerous_sink" and f.get("name") in _DESERIALIZATION_SINK_NAMES
         ]
     if klass in _PATH:
@@ -224,9 +267,7 @@ def _grade_by_source(source: str) -> tuple[Grounding, ScreenReason]:
     return Grounding.UNKNOWN, ScreenReason.SINK_SOURCE_UNRESOLVED
 
 
-def _resolve(
-    graded: list[tuple[Grounding, ScreenReason]]
-) -> tuple[Grounding, ScreenReason]:
+def _resolve(graded: list[tuple[Grounding, ScreenReason]]) -> tuple[Grounding, ScreenReason]:
     """Strongest claim across matching sinks: grounded > unknown > contradicted >
     unsupported. One parameter-reachable sink grounds the hypothesis; an analysis
     limit on one sink never masquerades as proof across the others."""

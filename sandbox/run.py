@@ -11,6 +11,7 @@ daemonises the container via conmon/runc, so SIGKILLing the client does not
 kill the container. The container is therefore tracked explicitly and torn
 down explicitly.
 """
+
 from __future__ import annotations
 
 import atexit
@@ -84,19 +85,27 @@ def run(
 ) -> Result:
     name = f"vulnforge-{uuid.uuid4().hex[:12]}"
     args: list[str] = [
-        "podman", "run",
+        "podman",
+        "run",
         "--rm",
-        "--name", name,
+        "--name",
+        name,
         "-i",
         "--network=none",
         "--read-only",
-        "--tmpfs", "/tmp:size=128m,mode=1777",
-        "--user", "65534:65534",
+        "--tmpfs",
+        "/tmp:size=128m,mode=1777",
+        "--user",
+        "65534:65534",
         "--cap-drop=ALL",
-        "--security-opt", "no-new-privileges",
-        "--pids-limit", str(pids_limit),
-        "--memory", memory,
-        "--cpus", cpus,
+        "--security-opt",
+        "no-new-privileges",
+        "--pids-limit",
+        str(pids_limit),
+        "--memory",
+        memory,
+        "--cpus",
+        cpus,
     ]
     for m in mounts:
         ro = "true" if m.mode == "ro" else "false"

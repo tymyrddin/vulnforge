@@ -9,6 +9,7 @@ timeout, or was interrupted.
 Skipped on hosts that have not run ``vulnforge bootstrap`` (podman or the
 sandbox image missing).
 """
+
 from __future__ import annotations
 
 import shutil
@@ -36,7 +37,9 @@ skip_if_no_sandbox = pytest.mark.skipif(
 def _live_vulnforge_containers() -> list[str]:
     out = subprocess.run(
         ["podman", "ps", "--format", "{{.Names}}"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return [n for n in out.stdout.splitlines() if n.startswith("vulnforge-")]
 

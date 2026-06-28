@@ -6,8 +6,6 @@ __pycache__/
 .Python
 *.egg-info/
 *.egg
-build/
-dist/
 .eggs/
 
 # Virtual environments
@@ -37,13 +35,6 @@ htmlcov/
 .vulnforge/
 bootstrap/sandbox.lock
 runs/
-
-# Scratch and ad-hoc corpus dropped inside the checkout. The curated corpus lives
-# under $XDG_DATA_HOME/vulnforge/corpus/; nothing fetched belongs in the repo.
-tmp/
-*.bin
-*.hex
-*.elf
 
 # Secrets
 .env

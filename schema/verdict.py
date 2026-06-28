@@ -1,4 +1,5 @@
 """Verdict schema. Produced exclusively by `stages/verify.py`."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

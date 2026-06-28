@@ -164,7 +164,7 @@ transparently.
 Purpose: compare observations against hypotheses without using the AI. CVE correlation runs as the
 last step, labelling confirmed findings. [cve.md](cve.md) covers correlation.
 
-- Uses `observations_ref` and `refs.read("tested_hypotheses_latest")`.
+- Takes `observations_ref`; the hypothesis under test is read from each observation's embedded `tested_hypothesis_ref`, not from a separate named ref.
 - CONFIRMED always wins: if a hypothesis already has a CONFIRMED verdict, subsequent observations
   are skipped.
 - The existing verdict is loaded from the store, not just in-memory, so it survives refactors.

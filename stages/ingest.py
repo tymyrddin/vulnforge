@@ -3,6 +3,7 @@ manifest blob mapping {path: digest}.
 
 The repo path is local. Cloning, if needed, happens outside the analysis
 pipeline so the analysis host can remain offline."""
+
 from __future__ import annotations
 
 import json
@@ -34,13 +35,15 @@ def run(repo_path: Path) -> str:
     manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     manifest_ref = objects.put(manifest_bytes)
     refs.write("ingest_latest", manifest_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="ingest",
-        input_refs=(str(repo_path),),
-        output_refs=(manifest_ref,),
-        model_hash=None,
-        seed=None,
-        summary=f"{len(manifest)} files ingested",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="ingest",
+            input_refs=(str(repo_path),),
+            output_refs=(manifest_ref,),
+            model_hash=None,
+            seed=None,
+            summary=f"{len(manifest)} files ingested",
+        )
+    )
     return manifest_ref

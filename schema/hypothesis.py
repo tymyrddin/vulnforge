@@ -14,11 +14,12 @@ Three orthogonal fields carry related-but-distinct information:
     make about it. The model can only ever set "unverified"; the verifier is
     the only place "confirmed" appears.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 # Matches template tokens rather than concrete attack strings.
 # Parentheses and other syntax are NOT banned: for code-execution attacks
@@ -45,20 +46,20 @@ def _is_placeholder(s: str) -> bool:
     return bool(re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", stripped))
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     PROPOSED = "proposed"
     TESTED = "tested"
     CONFIRMED = "confirmed"
     REFUTED = "refuted"
 
 
-class EvidenceType(str, Enum):
+class EvidenceType(StrEnum):
     STATIC_PATTERN = "static_pattern"
     BEHAVIOUR_INFERRED = "behaviour_inferred"
     EXECUTION_OBSERVED = "execution_observed"
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(StrEnum):
     UNVERIFIED = "unverified"
     TESTED = "tested"
     CONFIRMED = "confirmed"
@@ -90,7 +91,7 @@ class Hypothesis:
         model_hash: str,
         evidence_type: EvidenceType = EvidenceType.STATIC_PATTERN,
         verification_status: VerificationStatus = VerificationStatus.UNVERIFIED,
-    ) -> "Hypothesis":
+    ) -> Hypothesis:
         if verification_status is VerificationStatus.CONFIRMED:
             raise ValueError(
                 "the model cannot propose a hypothesis as CONFIRMED; "
@@ -103,19 +104,16 @@ class Hypothesis:
             )
         if not isinstance(suggested_inputs, list):
             raise TypeError(
-                f"suggested_inputs must be a list of strings, "
-                f"got {type(suggested_inputs).__name__}"
+                f"suggested_inputs must be a list of strings, got {type(suggested_inputs).__name__}"
             )
         for s in suggested_inputs:
             if not isinstance(s, str):
                 raise TypeError(
-                    f"suggested_inputs element must be a string, "
-                    f"got {type(s).__name__}: {s!r}"
+                    f"suggested_inputs element must be a string, got {type(s).__name__}: {s!r}"
                 )
             if _is_placeholder(s):
                 raise ValueError(
-                    f"suggested_inputs must be testable values, not template "
-                    f"placeholders: {s!r}"
+                    f"suggested_inputs must be testable values, not template placeholders: {s!r}"
                 )
         return cls(
             attack_type=attack_type,

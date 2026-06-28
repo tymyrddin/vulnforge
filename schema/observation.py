@@ -1,12 +1,13 @@
 """Observation schema. Produced by `stages/execute.py` from a payload + target
 run inside the sandbox. Pure data."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class Outcome(str, Enum):
+class Outcome(StrEnum):
     CLEAN_EXIT = "clean_exit"
     NONZERO_EXIT = "nonzero_exit"
     CRASH = "crash"

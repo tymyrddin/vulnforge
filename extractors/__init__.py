@@ -39,6 +39,7 @@ distinct from the absence of a fact, and distinct from "constant". A value the
 pass cannot follow is not proof the attacker has no influence over it.
 Extractors report facts, not conclusions.
 """
+
 from __future__ import annotations
 
 from typing import Any

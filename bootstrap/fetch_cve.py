@@ -15,6 +15,7 @@ Workflow:
 Data lands at $XDG_DATA_HOME/vulnforge/cve/osv-pypi/ (outside the repo,
 alongside weights/ per the workspace separation policy).
 """
+
 from __future__ import annotations
 
 import json

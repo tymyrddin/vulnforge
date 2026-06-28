@@ -4,6 +4,7 @@ slices. Pure AST analysis; no AI.
 Each slice captures function signature, body, decorators, intra-file call
 graph context, globals referenced, and file-level imports. Output is a
 content-addressed manifest mapping slice_id -> slice_ref."""
+
 from __future__ import annotations
 
 import ast
@@ -39,20 +40,25 @@ def run(manifest_ref: str) -> str:
     manifest_bytes = json.dumps(slices, sort_keys=True, separators=(",", ":")).encode()
     slices_manifest_ref = objects.put(manifest_bytes)
     refs.write("index_latest", slices_manifest_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="index",
-        input_refs=(manifest_ref,),
-        output_refs=(slices_manifest_ref,),
-        model_hash=None,
-        seed=None,
-        summary=f"{len(slices)} slices from {py_count} Python files",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="index",
+            input_refs=(manifest_ref,),
+            output_refs=(slices_manifest_ref,),
+            model_hash=None,
+            seed=None,
+            summary=f"{len(slices)} slices from {py_count} Python files",
+        )
+    )
     return slices_manifest_ref
 
 
 def _index_file(
-    file_path: str, file_hash: str, source: str, tree: ast.Module,
+    file_path: str,
+    file_hash: str,
+    source: str,
+    tree: ast.Module,
 ) -> dict[str, dict[str, Any]]:
     source_lines = source.splitlines()
     imports = _file_imports(tree)
@@ -165,11 +171,10 @@ def _calls(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
 
 
 def _globals_used(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, module_names: set[str],
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    module_names: set[str],
 ) -> list[str]:
-    local: set[str] = {
-        a.arg for a in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
-    }
+    local: set[str] = {a.arg for a in node.args.posonlyargs + node.args.args + node.args.kwonlyargs}
     if node.args.vararg:
         local.add(node.args.vararg.arg)
     if node.args.kwarg:
@@ -179,13 +184,13 @@ def _globals_used(
             for t in child.targets:
                 if isinstance(t, ast.Name):
                     local.add(t.id)
-        elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+        elif (
+            isinstance(child, ast.AnnAssign)
+            and isinstance(child.target, ast.Name)
+            or isinstance(child, (ast.For, ast.AsyncFor))
+            and isinstance(child.target, ast.Name)
+            or isinstance(child, ast.NamedExpr)
+        ):
             local.add(child.target.id)
-        elif isinstance(child, (ast.For, ast.AsyncFor)) and isinstance(child.target, ast.Name):
-            local.add(child.target.id)
-        elif isinstance(child, ast.NamedExpr):
-            local.add(child.target.id)
-    referenced: set[str] = {
-        child.id for child in ast.walk(node) if isinstance(child, ast.Name)
-    }
+    referenced: set[str] = {child.id for child in ast.walk(node) if isinstance(child, ast.Name)}
     return sorted((module_names & referenced) - local)

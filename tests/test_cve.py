@@ -1,4 +1,5 @@
 """Unit tests for the CVE correlation module."""
+
 from __future__ import annotations
 
 import json
@@ -28,9 +29,7 @@ def test_cve_index_match_with_fixture():
     with tempfile.TemporaryDirectory() as tmpdir:
         osv_dir = Path(tmpdir) / "osv-pypi"
         osv_dir.mkdir()
-        (osv_dir / "GHSA-test-0001-xxxx.json").write_text(
-            json.dumps(fixture), encoding="utf-8"
-        )
+        (osv_dir / "GHSA-test-0001-xxxx.json").write_text(json.dumps(fixture), encoding="utf-8")
 
         with mock.patch("cve.index.cve_dir", return_value=Path(tmpdir)):
             db = cve_index.load()
@@ -43,9 +42,11 @@ def test_cve_index_match_with_fixture():
 def test_cve_index_load_returns_none_when_absent():
     from cve import index as cve_index
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with mock.patch("cve.index.cve_dir", return_value=Path(tmpdir)):
-            db = cve_index.load()
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        mock.patch("cve.index.cve_dir", return_value=Path(tmpdir)),
+    ):
+        db = cve_index.load()
 
     assert db is None, "load() should return None when osv-pypi dir is missing"
 
@@ -66,7 +67,8 @@ def test_verify_attaches_cve_refs_to_confirmed_verdict():
     from schema.hypothesis import EvidenceType, Hypothesis, Status, VerificationStatus
     from stages import verify
     from store import objects
-    from workspace import new_run, use as use_workspace
+    from workspace import new_run
+    from workspace import use as use_workspace
 
     fixture_db: dict[str, list[str]] = {"CWE-94": ["CVE-2024-EVAL"]}
 
@@ -98,12 +100,11 @@ def test_verify_attaches_cve_refs_to_confirmed_verdict():
             "timed_out": False,
             "tested_hypothesis_ref": tested_hyp_ref,
         }
-        obs_ref = objects.put(
-            json.dumps(obs, sort_keys=True, separators=(",", ":")).encode()
-        )
+        obs_ref = objects.put(json.dumps(obs, sort_keys=True, separators=(",", ":")).encode())
         obs_manifest_ref = objects.put(
-            json.dumps({"app.py::vulnerable_eval::0::0": obs_ref},
-                       sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(
+                {"app.py::vulnerable_eval::0::0": obs_ref}, sort_keys=True, separators=(",", ":")
+            ).encode()
         )
         hyp_manifest_ref = objects.put(
             json.dumps({}, sort_keys=True, separators=(",", ":")).encode()

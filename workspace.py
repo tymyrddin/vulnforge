@@ -19,11 +19,12 @@ A scan acquires a :class:`Workspace` (typically via :func:`new_run`), pins it
 as active with :func:`use`, and any module that needs to write artefacts asks
 :func:`active` for it. Tests can supply their own via :meth:`Workspace.at`.
 """
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -63,7 +64,7 @@ class Workspace:
     reports_dir: Path
 
     @classmethod
-    def at(cls, path: Path) -> "Workspace":
+    def at(cls, path: Path) -> Workspace:
         return cls(
             root=path,
             store_root=path / "store" / "objects",
@@ -76,7 +77,7 @@ class Workspace:
 
 def new_run(run_id: str | None = None, base: Path | None = None) -> Workspace:
     if run_id is None:
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     base = base if base is not None else runs_root()
     return Workspace.at(base / run_id)
 
@@ -96,7 +97,5 @@ def clear() -> None:
 
 def active() -> Workspace:
     if _active is None:
-        raise RuntimeError(
-            "no active workspace; call workspace.use() at the entry point"
-        )
+        raise RuntimeError("no active workspace; call workspace.use() at the entry point")
     return _active

@@ -10,6 +10,7 @@ them at ``$XDG_DATA_HOME/vulnforge/weights/<alias>.gguf`` (fallback
 ``~/.local/share/vulnforge/weights/<alias>.gguf``) and run
 ``vulnforge bootstrap --verify-only`` to confirm hashes match the lock file.
 """
+
 from __future__ import annotations
 
 import hashlib

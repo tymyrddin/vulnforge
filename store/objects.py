@@ -4,6 +4,7 @@ Writes are atomic (tempfile + rename). Reads verify the digest. Nothing here
 deletes objects; the store is append-only by convention. The store location is
 determined by the active :mod:`workspace`, set once at the CLI entry point.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -40,7 +41,7 @@ def get(digest: str) -> bytes:
     data = _path_for(digest).read_bytes()
     actual = hashlib.sha256(data).hexdigest()
     if actual != digest:
-        raise IOError(f"store: hash mismatch reading {digest}, got {actual}")
+        raise OSError(f"store: hash mismatch reading {digest}, got {actual}")
     return data
 
 

@@ -1,6 +1,7 @@
 """Synthesise stage: for each hypothesis, ask the local model to generate
 concrete payloads. The model proposes what to try; execution decides whether
 any of it worked."""
+
 from __future__ import annotations
 
 import hashlib
@@ -72,15 +73,17 @@ def run(hypotheses_ref: str, *, model_alias: str, seed: int, max_tokens: int = 5
     manifest_bytes = json.dumps(payloads, sort_keys=True, separators=(",", ":")).encode()
     payloads_ref = objects.put(manifest_bytes)
     refs.write("payloads_latest", payloads_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="synthesise",
-        input_refs=(hypotheses_ref,),
-        output_refs=(payloads_ref,),
-        model_hash=spec.sha256,
-        seed=seed,
-        summary=f"{len(payloads)} payloads from {len(hyp_manifest)} hypotheses",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="synthesise",
+            input_refs=(hypotheses_ref,),
+            output_refs=(payloads_ref,),
+            model_hash=spec.sha256,
+            seed=seed,
+            summary=f"{len(payloads)} payloads from {len(hyp_manifest)} hypotheses",
+        )
+    )
     return payloads_ref
 
 
@@ -129,10 +132,12 @@ def _parse_payloads(text: str, hyp_id: str) -> list[dict[str, Any]]:
     for item in raw_list:
         if not isinstance(item, dict) or not isinstance(item.get("value"), str):
             continue
-        out.append({
-            "hypothesis_id": hyp_id,
-            "value": item["value"],
-            "category": str(item.get("category", "")),
-            "rationale": str(item.get("rationale", "")),
-        })
+        out.append(
+            {
+                "hypothesis_id": hyp_id,
+                "value": item["value"],
+                "category": str(item.get("category", "")),
+                "rationale": str(item.get("rationale", "")),
+            }
+        )
     return out

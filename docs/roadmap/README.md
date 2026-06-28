@@ -25,7 +25,6 @@ These items are scoped but not built. Priority is a rough ordering, not a commit
 | Payload dispatch       | Medium   | synthesise tags each payload with a variant `category` (baseline, encoded, oversized, unicode, nested, polyglot), but `execute.py` passes every payload as the function's first argument. Dispatch by delivery channel (stdin, file, network) is a separate idea, not built. |
 | Correlation loop       | Med-High | Correlate confirmed findings across hypotheses into multi-stage exploit chains. The measurement half of this is Move 4 in [verdict-pipeline.md](verdict-pipeline.md), tracked under measurement tooling below.                                                               |
 | Plugin architecture    | Medium   | Allow custom checkers: `cargo-audit` (Rust), `pip-audit` (Python), `semgrep` rules, CodeQL queries. Run before or alongside AI stages.                                                                                                                                       |
-| Sandbox fidelity       | Low      | Firmware analysis: QEMU emulation for ARM, RISC-V, MIPS, to run firmware images in the sandbox. Currently out of scope.                                                                                                                                                      |
 
 ### Advanced capabilities and research
 

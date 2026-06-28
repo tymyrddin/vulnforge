@@ -29,10 +29,11 @@ The line that matters: never conflate "not tainted" (constant, contradicted) wit
 "taint unresolved" (unknown). Erasing that distinction is the failure this stage
 exists to prevent.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 # Policy constant, not an empirically calibrated number. The only property that
 # carries weight is the ordering: an unknown-grounding hypothesis survives at a lower
@@ -42,14 +43,14 @@ from enum import Enum
 UNKNOWN_CONFIDENCE_CAP = 0.35
 
 
-class Grounding(str, Enum):
+class Grounding(StrEnum):
     GROUNDED = "grounded"
     UNKNOWN = "unknown"
     CONTRADICTED = "contradicted"
     UNSUPPORTED = "unsupported"
 
 
-class ScreenReason(str, Enum):
+class ScreenReason(StrEnum):
     # grounded
     PARAM_REACHES_SINK = "param_reaches_sink"
     # unknown
@@ -67,12 +68,14 @@ class ScreenReason(str, Enum):
 # Catch-all reasons land in UNKNOWN, never UNSUPPORTED: an unrecognised state is
 # accepted with penalty, never silently rejected, so a novel attack class does not
 # quietly collapse recall.
-_UNKNOWN_CATCHALLS = frozenset({
-    ScreenReason.ATTACK_TYPE_UNRECOGNISED,
-    ScreenReason.SCREEN_OTHER,
-    ScreenReason.INSUFFICIENT_SQL_EVIDENCE,
-    ScreenReason.SINK_SOURCE_UNRESOLVED,
-})
+_UNKNOWN_CATCHALLS = frozenset(
+    {
+        ScreenReason.ATTACK_TYPE_UNRECOGNISED,
+        ScreenReason.SCREEN_OTHER,
+        ScreenReason.INSUFFICIENT_SQL_EVIDENCE,
+        ScreenReason.SINK_SOURCE_UNRESOLVED,
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,12 +4,13 @@ Inference runs inside the canonical sandbox. The prompt is passed via stdin so
 it does not appear in the process command line (which is readable via /proc).
 Output for a given (weights_hash, prompt, seed) is deterministic.
 """
+
 from __future__ import annotations
 
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sandbox.run import Mount, run
@@ -47,7 +48,7 @@ def _extract_assistant_text(raw_stdout: bytes) -> str:
         if line.startswith("> "):
             last_echo = i
     if last_echo >= 0:
-        text = "\n".join(lines[last_echo + 1:])
+        text = "\n".join(lines[last_echo + 1 :])
     return text.strip()
 
 
@@ -89,29 +90,33 @@ def infer(
         prompt = "/no_think\n\n" + prompt
     actual = _file_sha256(weights_path)
     if actual != weights_hash:
-        raise ValueError(
-            f"weights hash mismatch: expected {weights_hash}, got {actual}"
-        )
+        raise ValueError(f"weights hash mismatch: expected {weights_hash}, got {actual}")
     stderr_log_path: Path | None = None
     if log_dir is not None:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         stderr_log_path = log_dir / f"llama-{stamp}-seed{seed}.log"
     log_args = ["--log-file", "/dev/stderr"] if debug_llama else ["--log-disable"]
     result = run(
         image=sandbox_image,
         command=[
             "llama-cli",
-            "--model", "/weights/model.gguf",
-            "--seed", str(seed),
-            "--n-predict", str(max_tokens),
-            "--ctx-size", str(ctx_size),
-            "--temp", str(temperature),
+            "--model",
+            "/weights/model.gguf",
+            "--seed",
+            str(seed),
+            "--n-predict",
+            str(max_tokens),
+            "--ctx-size",
+            str(ctx_size),
+            "--temp",
+            str(temperature),
             "--no-display-prompt",
             "--single-turn",
             *log_args,
             "--simple-io",
             "--no-warmup",
-            "--file", "/dev/stdin",
+            "--file",
+            "/dev/stdin",
         ],
         mounts=(Mount(source=weights_path, target="/weights/model.gguf", mode="ro"),),
         stdin=prompt.encode("utf-8"),

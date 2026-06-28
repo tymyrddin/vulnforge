@@ -1,11 +1,12 @@
 """Report stage: emit human-readable findings from a verdicts ref. Output is a
 plain file under ``<workspace>/reports/``; the audit log retains the canonical
 provenance."""
+
 from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +55,7 @@ def run(verdicts_ref: str) -> Path:
         else:
             refuted.append((hyp_id, verdict, hyp))
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     report_content = _render(timestamp, confirmed, refuted, skipped, screen_verdicts)
 
@@ -63,15 +64,17 @@ def run(verdicts_ref: str) -> Path:
     report_path = reports_dir / f"report_{now.strftime('%Y%m%dT%H%M%SZ')}.md"
     report_path.write_text(report_content, encoding="utf-8")
 
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="report",
-        input_refs=(verdicts_ref,),
-        output_refs=(str(report_path),),
-        model_hash=None,
-        seed=None,
-        summary=f"{len(confirmed)} confirmed, {len(refuted)} refuted, {skipped} skipped",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="report",
+            input_refs=(verdicts_ref,),
+            output_refs=(str(report_path),),
+            model_hash=None,
+            seed=None,
+            summary=f"{len(confirmed)} confirmed, {len(refuted)} refuted, {skipped} skipped",
+        )
+    )
     return report_path
 
 
@@ -124,7 +127,9 @@ def _render(
     lines.append("")
     if confirmed:
         for hyp_id, verdict, hyp in confirmed:
-            lines.append(f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}")
+            lines.append(
+                f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}"
+            )
             lines.append(f"- Assumption broken: {hyp.get('assumption_broken', '')}")
             lines.append(f"- Expected effect: {hyp.get('expected_effect', '')}")
             lines.append(f"- Evidence: {verdict.get('evidence', '')}")
@@ -143,7 +148,9 @@ def _render(
         lines.append("## Refuted Hypotheses")
         lines.append("")
         for hyp_id, verdict, hyp in refuted:
-            lines.append(f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}")
+            lines.append(
+                f"### {hyp.get('location', 'unknown')} - {hyp.get('attack_type', 'unknown')}"
+            )
             lines.append(f"- Reason: {verdict.get('evidence', '')}")
             _append_grounding(lines, screen_verdicts.get(hyp_id))
             lines.append(f"- Provenance: {hyp.get('provenance', '')}")

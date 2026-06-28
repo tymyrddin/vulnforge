@@ -1,4 +1,5 @@
 """Audit event. Appended to a hash-chained JSONL log by `audit/log.py`."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

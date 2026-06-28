@@ -3,6 +3,7 @@
 Single public entry point: extract(node) -> list[SecurityFact].
 Four sub-walkers: subprocess, file path, dangerous sink, environment access.
 """
+
 from __future__ import annotations
 
 import ast
@@ -10,32 +11,45 @@ from typing import Any
 
 from extractors import SecurityFact
 
-_SUBPROCESS_FUNCS = frozenset({
-    "subprocess.run",
-    "subprocess.call",
-    "subprocess.check_output",
-    "subprocess.check_call",
-    "subprocess.Popen",
-})
+_SUBPROCESS_FUNCS = frozenset(
+    {
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.check_output",
+        "subprocess.check_call",
+        "subprocess.Popen",
+    }
+)
 
-_OS_SHELL_FUNCS = frozenset({
-    "os.system",
-    "os.popen",
-})
+_OS_SHELL_FUNCS = frozenset(
+    {
+        "os.system",
+        "os.popen",
+    }
+)
 
-_DANGEROUS_SINKS = frozenset({
-    "eval", "exec", "compile",
-    "pickle.loads", "pickle.load",
-    "yaml.load",
-    "marshal.loads", "marshal.load",
-    "os.system", "os.popen",
-})
+_DANGEROUS_SINKS = frozenset(
+    {
+        "eval",
+        "exec",
+        "compile",
+        "pickle.loads",
+        "pickle.load",
+        "yaml.load",
+        "marshal.loads",
+        "marshal.load",
+        "os.system",
+        "os.popen",
+    }
+)
 
-_ENV_CALL_FUNCS = frozenset({
-    "os.getenv",
-    "os.environ.get",
-    "environ.get",
-})
+_ENV_CALL_FUNCS = frozenset(
+    {
+        "os.getenv",
+        "os.environ.get",
+        "environ.get",
+    }
+)
 
 
 def extract(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[SecurityFact]:
@@ -76,10 +90,14 @@ def _subprocess_facts(
             key: tuple[Any, str, str] = (True, "string", arg_source)
             if key not in seen:
                 seen.add(key)
-                facts.append({
-                    "type": "subprocess", "shell": True,
-                    "argv_style": "string", "arg_source": arg_source,
-                })
+                facts.append(
+                    {
+                        "type": "subprocess",
+                        "shell": True,
+                        "argv_style": "string",
+                        "arg_source": arg_source,
+                    }
+                )
             continue
 
         if func_name not in _SUBPROCESS_FUNCS:
@@ -97,9 +115,11 @@ def _subprocess_facts(
             first = child.args[0]
             if isinstance(first, (ast.List, ast.Tuple)):
                 argv_style = "list"
-            elif isinstance(first, ast.JoinedStr):
-                argv_style = "string"
-            elif isinstance(first, ast.Constant) and isinstance(first.value, str):
+            elif (
+                isinstance(first, ast.JoinedStr)
+                or isinstance(first, ast.Constant)
+                and isinstance(first.value, str)
+            ):
                 argv_style = "string"
             else:
                 argv_style = "unknown"
@@ -111,10 +131,14 @@ def _subprocess_facts(
         key = (shell, argv_style, arg_source)
         if key not in seen:
             seen.add(key)
-            facts.append({
-                "type": "subprocess", "shell": shell,
-                "argv_style": argv_style, "arg_source": arg_source,
-            })
+            facts.append(
+                {
+                    "type": "subprocess",
+                    "shell": shell,
+                    "argv_style": argv_style,
+                    "arg_source": arg_source,
+                }
+            )
 
     return facts
 
@@ -139,19 +163,22 @@ def _classify_arg(node: ast.expr, param_names: set[str]) -> str:
     if isinstance(node, ast.JoinedStr):
         # An f-string is parameter-derived when any interpolated value is a parameter.
         for value in node.values:
-            if isinstance(value, ast.FormattedValue) and _reaches_parameter(value.value, param_names):
+            if isinstance(value, ast.FormattedValue) and _reaches_parameter(
+                value.value, param_names
+            ):
                 return "parameter-derived"
-        return "constant" if node.values and all(isinstance(v, ast.Constant) for v in node.values) else "unknown"
+        return (
+            "constant"
+            if node.values and all(isinstance(v, ast.Constant) for v in node.values)
+            else "unknown"
+        )
     if isinstance(node, (ast.List, ast.Tuple)):
         return _aggregate_arg([_classify_arg(e, param_names) for e in node.elts])
     return "unknown"
 
 
 def _reaches_parameter(node: ast.expr, param_names: set[str]) -> bool:
-    return any(
-        isinstance(child, ast.Name) and child.id in param_names
-        for child in ast.walk(node)
-    )
+    return any(isinstance(child, ast.Name) and child.id in param_names for child in ast.walk(node))
 
 
 def _aggregate_arg(sources: list[str]) -> str:
@@ -263,13 +290,17 @@ def _dangerous_sink_facts(
 
         if name in _SUBPROCESS_FUNCS:
             shell_kwarg = next((kw for kw in child.keywords if kw.arg == "shell"), None)
-            if (shell_kwarg
-                    and isinstance(shell_kwarg.value, ast.Constant)
-                    and shell_kwarg.value.value is True):
+            if (
+                shell_kwarg
+                and isinstance(shell_kwarg.value, ast.Constant)
+                and shell_kwarg.value.value is True
+            ):
                 sink_name = f"{name}(shell=True)"
                 if (sink_name, arg_source) not in seen:
                     seen.add((sink_name, arg_source))
-                    facts.append({"type": "dangerous_sink", "name": sink_name, "arg_source": arg_source})
+                    facts.append(
+                        {"type": "dangerous_sink", "name": sink_name, "arg_source": arg_source}
+                    )
 
     return facts
 

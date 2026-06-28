@@ -5,6 +5,7 @@ TESTED.
 This module owns the PROPOSED -> TESTED transition. Grep for
 `status=Status.TESTED` and you find it here, only here.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -95,9 +96,7 @@ def run(payloads_ref: str, target_ref: str, *, timeout_seconds: int) -> str:
         obs_blob = json.dumps(obs, sort_keys=True, separators=(",", ":")).encode()
         observations[payload_id] = objects.put(obs_blob)
 
-    observations_manifest = json.dumps(
-        observations, sort_keys=True, separators=(",", ":")
-    ).encode()
+    observations_manifest = json.dumps(observations, sort_keys=True, separators=(",", ":")).encode()
     observations_ref = objects.put(observations_manifest)
     refs.write("execution_latest", observations_ref)
 
@@ -107,15 +106,17 @@ def run(payloads_ref: str, target_ref: str, *, timeout_seconds: int) -> str:
         ).encode()
         refs.write("tested_hypotheses_latest", objects.put(tested_manifest))
 
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="execute",
-        input_refs=(payloads_ref, target_ref),
-        output_refs=(observations_ref,),
-        model_hash=None,
-        seed=None,
-        summary=f"{len(observations)} observations, {skipped} skipped",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="execute",
+            input_refs=(payloads_ref, target_ref),
+            output_refs=(observations_ref,),
+            model_hash=None,
+            seed=None,
+            summary=f"{len(observations)} observations, {skipped} skipped",
+        )
+    )
     return observations_ref
 
 

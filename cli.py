@@ -2,6 +2,7 @@
 the analysis pipeline), audit-verify (walk the audit log hash chain), plumbing
 (end-to-end smoke test), and probe (one-shot hypothesise against a single file,
 bypassing the staged pipeline)."""
+
 from __future__ import annotations
 
 import subprocess
@@ -14,10 +15,7 @@ import workspace
 
 
 def _resolve_workspace(workspace_opt: Path | None) -> workspace.Workspace:
-    if workspace_opt is not None:
-        ws = workspace.Workspace.at(workspace_opt)
-    else:
-        ws = workspace.new_run()
+    ws = workspace.Workspace.at(workspace_opt) if workspace_opt is not None else workspace.new_run()
     workspace.use(ws)
     return ws
 
@@ -45,21 +43,31 @@ def bootstrap(verify_only: bool, skip_image: bool) -> None:
 
 @main.command()
 @click.argument("repo", type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
-              default=None, help="Workspace directory (overrides default run dir).")
+@click.option(
+    "--workspace",
+    "workspace_opt",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Workspace directory (overrides default run dir).",
+)
 def scan(repo: Path, workspace_opt: Path | None) -> None:
     """Run the analysis pipeline against REPO."""
     from orchestrator import pipeline
 
     ws = _resolve_workspace(workspace_opt)
     click.echo(f"workspace: {ws.root}")
-    pipeline.run_repo(repo)
+    pipeline.run(repo)
     click.echo(f"workspace: {ws.root}")
 
 
 @main.command(name="audit-verify")
-@click.option("--workspace", "workspace_opt", type=click.Path(exists=True, path_type=Path),
-              required=True, help="Workspace directory to verify.")
+@click.option(
+    "--workspace",
+    "workspace_opt",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Workspace directory to verify.",
+)
 def audit_verify(workspace_opt: Path) -> None:
     """Walk the audit log and check every hash link."""
     from audit.log import verify_chain
@@ -70,17 +78,32 @@ def audit_verify(workspace_opt: Path) -> None:
 
 
 @main.command()
-@click.option("--alias", default="plumbing-check", show_default=True,
-              help="models.lock alias to use for the smoke run.")
-@click.option("--prompt", default="Reply with the single word: PIPES",
-              show_default=True, help="Prompt sent to the model.")
+@click.option(
+    "--alias",
+    default="plumbing-check",
+    show_default=True,
+    help="models.lock alias to use for the smoke run.",
+)
+@click.option(
+    "--prompt",
+    default="Reply with the single word: PIPES",
+    show_default=True,
+    help="Prompt sent to the model.",
+)
 @click.option("--max-tokens", default=16, show_default=True, type=int)
-@click.option("--timeout", default=120, show_default=True, type=int,
-              help="Sandbox timeout in seconds.")
-@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
-              default=None, help="Workspace directory (overrides default run dir).")
-def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int,
-             workspace_opt: Path | None) -> None:
+@click.option(
+    "--timeout", default=120, show_default=True, type=int, help="Sandbox timeout in seconds."
+)
+@click.option(
+    "--workspace",
+    "workspace_opt",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Workspace directory (overrides default run dir).",
+)
+def plumbing(
+    alias: str, prompt: str, max_tokens: int, timeout: int, workspace_opt: Path | None
+) -> None:
     """End-to-end smoke test. Needs `vulnforge bootstrap` to have completed.
 
     Confirms: podman runs, the sandbox image is built, the named weights are
@@ -112,14 +135,11 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int,
     specs = {s.alias: s for s in fetch_models.load_specs()}
     if alias not in specs:
         raise click.ClickException(
-            f"alias '{alias}' not found in bootstrap/models.lock; "
-            f"known aliases: {sorted(specs)}"
+            f"alias '{alias}' not found in bootstrap/models.lock; known aliases: {sorted(specs)}"
         )
     spec = specs[alias]
     if not spec.dest.exists():
-        raise click.ClickException(
-            f"weights missing: {spec.dest}; run `vulnforge bootstrap`"
-        )
+        raise click.ClickException(f"weights missing: {spec.dest}; run `vulnforge bootstrap`")
     click.echo(f"weights:  {spec.alias} ({spec.dest})")
 
     click.echo("inference running inside sandbox...")
@@ -135,8 +155,10 @@ def plumbing(alias: str, prompt: str, max_tokens: int, timeout: int,
         log_dir=ws.logs_dir,
     )
     click.echo(f"output:   {result.output_text.strip()!r}")
-    click.echo(f"hashes:   weights={result.weights_hash[:12]} "
-               f"stdout={result.stdout_hash[:12]} stderr={result.stderr_hash[:12]}")
+    click.echo(
+        f"hashes:   weights={result.weights_hash[:12]} "
+        f"stdout={result.stdout_hash[:12]} stderr={result.stderr_hash[:12]}"
+    )
     click.echo("plumbing ok")
 
 
@@ -173,32 +195,60 @@ def _extract_first_json_object(text: str) -> str:
         elif c == "}":
             depth -= 1
             if depth == 0:
-                return text[start:i + 1]
+                return text[start : i + 1]
     raise ValueError("unbalanced JSON object")
 
 
 @main.command()
 @click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--alias", default="qwen3-8b", show_default=True,
-              help="models.lock alias to use for inference.")
+@click.option(
+    "--alias", default="qwen3-8b", show_default=True, help="models.lock alias to use for inference."
+)
 @click.option("--seed", default=1, show_default=True, type=int)
 @click.option("--max-tokens", default=1024, show_default=True, type=int)
-@click.option("--ctx-size", default=4096, show_default=True, type=int,
-              help="llama.cpp context window. Probe budgets header + source + reply.")
-@click.option("--timeout", default=600, show_default=True, type=int,
-              help="Sandbox timeout in seconds.")
-@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
-              default=None, help="Workspace directory (overrides default run dir).")
-@click.option("--debug-llama", is_flag=True,
-              help="Stream llama.cpp's own load and timing logs to stderr "
-                   "instead of suppressing them (--log-disable -> --log-file).")
-@click.option("--function", "function_name", default=None, metavar="NAME",
-              help="Extract a single named function using the pipeline slice format "
-                   "instead of sending the raw file. Keeps probe representative of "
-                   "the real pipeline context.")
-def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
-          timeout: int, workspace_opt: Path | None, debug_llama: bool,
-          function_name: str | None) -> None:
+@click.option(
+    "--ctx-size",
+    default=4096,
+    show_default=True,
+    type=int,
+    help="llama.cpp context window. Probe budgets header + source + reply.",
+)
+@click.option(
+    "--timeout", default=600, show_default=True, type=int, help="Sandbox timeout in seconds."
+)
+@click.option(
+    "--workspace",
+    "workspace_opt",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Workspace directory (overrides default run dir).",
+)
+@click.option(
+    "--debug-llama",
+    is_flag=True,
+    help="Stream llama.cpp's own load and timing logs to stderr "
+    "instead of suppressing them (--log-disable -> --log-file).",
+)
+@click.option(
+    "--function",
+    "function_name",
+    default=None,
+    metavar="NAME",
+    help="Extract a single named function using the pipeline slice format "
+    "instead of sending the raw file. Keeps probe representative of "
+    "the real pipeline context.",
+)
+def probe(
+    source: Path,
+    alias: str,
+    seed: int,
+    max_tokens: int,
+    ctx_size: int,
+    timeout: int,
+    workspace_opt: Path | None,
+    debug_llama: bool,
+    function_name: str | None,
+) -> None:
     """Run the hypothesise prompt against SOURCE (a single file).
 
     Bypasses the staged pipeline. By default, extracts every function via AST
@@ -237,14 +287,11 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
     specs = {s.alias: s for s in fetch_models.load_specs()}
     if alias not in specs:
         raise click.ClickException(
-            f"alias '{alias}' not found in bootstrap/models.lock; "
-            f"known aliases: {sorted(specs)}"
+            f"alias '{alias}' not found in bootstrap/models.lock; known aliases: {sorted(specs)}"
         )
     spec = specs[alias]
     if not spec.dest.exists():
-        raise click.ClickException(
-            f"weights missing: {spec.dest}; run `vulnforge bootstrap`"
-        )
+        raise click.ClickException(f"weights missing: {spec.dest}; run `vulnforge bootstrap`")
 
     prompt_template = PROMPT_PATH.read_text()
     source_text = source.read_text()
@@ -265,10 +312,15 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
                 f"available: {', '.join(available) or '(none)'}"
             )
         _slice_id, slice_data = next(iter(matches.items()))
-        to_probe = [(
-            _format_slice(slice_data), f"{source}::{function_name}", "probe",
-            slice_data.get("security_facts", []), slice_data.get("imports", []),
-        )]
+        to_probe = [
+            (
+                _format_slice(slice_data),
+                f"{source}::{function_name}",
+                "probe",
+                slice_data.get("security_facts", []),
+                slice_data.get("imports", []),
+            )
+        ]
     else:
         try:
             tree = ast.parse(source_text, filename=str(source))
@@ -279,15 +331,23 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             pairs = sorted(all_slices.items())
             if len(pairs) == 1:
                 _sid, sd = pairs[0]
-                to_probe = [(
-                    _format_slice(sd), f"{source}::{sd['function_name']}", "probe",
-                    sd.get("security_facts", []), sd.get("imports", []),
-                )]
+                to_probe = [
+                    (
+                        _format_slice(sd),
+                        f"{source}::{sd['function_name']}",
+                        "probe",
+                        sd.get("security_facts", []),
+                        sd.get("imports", []),
+                    )
+                ]
             else:
                 to_probe = [
                     (
-                        _format_slice(sd), f"{source}::{sd['function_name']}", f"probe-{sd['function_name']}",
-                        sd.get("security_facts", []), sd.get("imports", []),
+                        _format_slice(sd),
+                        f"{source}::{sd['function_name']}",
+                        f"probe-{sd['function_name']}",
+                        sd.get("security_facts", []),
+                        sd.get("imports", []),
                     )
                     for _sid, sd in pairs
                 ]
@@ -352,7 +412,7 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             if multi:
                 click.echo(f"no JSON object in output: {e}")
                 continue
-            raise click.ClickException(f"no JSON object in output: {e}")
+            raise click.ClickException(f"no JSON object in output: {e}") from e
 
         extracted_path = ws.root / f"{artefact_prefix}-extracted.txt"
         extracted_path.write_text(json_blob)
@@ -365,7 +425,7 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
             if multi:
                 click.echo(f"extracted blob is not valid JSON: {e}")
                 continue
-            raise click.ClickException(f"extracted blob is not valid JSON: {e}")
+            raise click.ClickException(f"extracted blob is not valid JSON: {e}") from e
 
         parsed_path = ws.root / f"{artefact_prefix}-parsed.json"
         parsed_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
@@ -392,11 +452,13 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
         )
         rejections = [
             {"index": o["index"], "raw": o["raw"], "rejection": o["rejection"]}
-            for o in outcomes if o["kind"] == "rejected"
+            for o in outcomes
+            if o["kind"] == "rejected"
         ]
         screen_records = [
             {k: v for k, v in o.items() if k not in ("kind", "raw")}
-            for o in outcomes if o["kind"] == "screened"
+            for o in outcomes
+            if o["kind"] == "screened"
         ]
         for o in outcomes:
             if o["kind"] == "rejected":
@@ -441,7 +503,8 @@ def probe(source: Path, alias: str, seed: int, max_tokens: int, ctx_size: int,
     if multi:
         click.echo(
             f"total:    {total_accepted} schema-accepted, {total_rejected_count} schema-rejected "
-            f"across {len(to_probe)} functions; screen kept {total_screen_kept}, dropped {total_dropped}"
+            f"across {len(to_probe)} functions; "
+            f"screen kept {total_screen_kept}, dropped {total_dropped}"
         )
     else:
         click.echo(
@@ -485,30 +548,34 @@ def _screen_probe_hypotheses(
                 ),
             )
         except (KeyError, TypeError, ValueError) as e:
-            outcomes.append({
-                "kind": "rejected",
-                "index": i,
-                "raw": item,
-                "rejection": f"{type(e).__name__}: {e}",
-            })
+            outcomes.append(
+                {
+                    "kind": "rejected",
+                    "index": i,
+                    "raw": item,
+                    "rejection": f"{type(e).__name__}: {e}",
+                }
+            )
             continue
 
         accepted += 1
         grounding, screen_reason = _grounding(item, facts, imports)
         kept, eff_conf = decide_policy(grounding, h.confidence)
         screen_kept += 1 if kept else 0
-        outcomes.append({
-            "kind": "screened",
-            "index": i,
-            "attack_type": h.attack_type,
-            "location": h.location,
-            "evidence_type": h.evidence_type.value,
-            "model_confidence": h.confidence,
-            "grounding": grounding.value,
-            "screen_reason": screen_reason.value,
-            "effective_confidence": eff_conf,
-            "kept": kept,
-        })
+        outcomes.append(
+            {
+                "kind": "screened",
+                "index": i,
+                "attack_type": h.attack_type,
+                "location": h.location,
+                "evidence_type": h.evidence_type.value,
+                "model_confidence": h.confidence,
+                "grounding": grounding.value,
+                "screen_reason": screen_reason.value,
+                "effective_confidence": eff_conf,
+                "kept": kept,
+            }
+        )
     return outcomes, accepted, screen_kept
 
 

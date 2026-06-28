@@ -5,6 +5,7 @@ enthusiasm: a system that mapped vulnerability tropes onto sinks without checkin
 whether attacker data reaches them. Each example below is a case the screen must now
 resolve in code rather than by model intuition.
 """
+
 from __future__ import annotations
 
 from schema.screen import (
@@ -27,8 +28,10 @@ def _hyp(attack_type: str, inputs=None, confidence: float = 0.8) -> dict:
 
 def _subprocess(shell, arg_source, argv_style="unknown") -> dict:
     return {
-        "type": "subprocess", "shell": shell,
-        "argv_style": argv_style, "arg_source": arg_source,
+        "type": "subprocess",
+        "shell": shell,
+        "argv_style": argv_style,
+        "arg_source": arg_source,
     }
 
 
@@ -38,9 +41,13 @@ def _sink(name: str, arg_source: str) -> dict:
 
 # The reviewer's four examples
 
+
 def test_sqli_in_container_cleanup_is_unsupported():
     # SQL payloads in a cleanup function with subprocess/file sinks and no db import.
-    facts = [_subprocess(False, "parameter:name", "list"), {"type": "file_write", "path_source": "constant"}]
+    facts = [
+        _subprocess(False, "parameter:name", "list"),
+        {"type": "file_write", "path_source": "constant"},
+    ]
     grounding, reason = _grounding(
         _hyp("SQL injection", ["' OR '1'='1", "admin'--"]), facts, ["import os", "import shutil"]
     )
@@ -72,8 +79,11 @@ def test_command_injection_unresolved_provenance_is_unknown():
 
 # Grounded and contradicted by argument provenance
 
+
 def test_eval_of_parameter_is_grounded():
-    grounding, reason = _grounding(_hyp("code_execution", ["1+1"]), [_sink("eval", "parameter:x")], [])
+    grounding, reason = _grounding(
+        _hyp("code_execution", ["1+1"]), [_sink("eval", "parameter:x")], []
+    )
     assert grounding is Grounding.GROUNDED
     assert reason is ScreenReason.PARAM_REACHES_SINK
 
@@ -85,6 +95,7 @@ def test_eval_of_constant_is_contradicted():
 
 
 # Multi-sink resolution: strongest claim wins
+
 
 def test_multi_sink_any_grounded_wins():
     facts = [
@@ -105,6 +116,7 @@ def test_multi_sink_unknown_beats_contradicted():
 
 # SQL handling: imports are a weak signal landing in unknown, not grounded
 
+
 def test_sqli_with_db_import_is_insufficient_evidence():
     grounding, reason = _grounding(_hyp("SQL injection", ["' OR 1=1"]), [], ["import sqlite3"])
     assert grounding is Grounding.UNKNOWN
@@ -112,6 +124,7 @@ def test_sqli_with_db_import_is_insufficient_evidence():
 
 
 # Unrecognised attack class preserves recall when there is attack surface
+
 
 def test_unrecognised_attack_type_with_sink_is_unknown():
     facts = [_subprocess(True, "unknown", "string")]
@@ -121,6 +134,7 @@ def test_unrecognised_attack_type_with_sink_is_unknown():
 
 
 # Policy: how much confidence survives a grounding state
+
 
 def test_policy_grounded_keeps_confidence():
     accepted, conf = decide_policy(Grounding.GROUNDED, 0.9)

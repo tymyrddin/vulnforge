@@ -7,6 +7,7 @@ ref). The orchestrator's only job is sequencing.
 Refs that are needed by more than one downstream stage (ingest_ref, hypotheses_ref)
 are retained explicitly rather than assuming a purely linear chain.
 """
+
 from __future__ import annotations
 
 from importlib.resources import files

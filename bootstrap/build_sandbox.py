@@ -4,6 +4,7 @@ The recorded hash is what `sandbox/run.py` refers to when invoking stages; this
 guarantees every stage runs against a known image rather than whatever
 `vulnforge-sandbox:latest` happens to resolve to at the time.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -21,9 +22,13 @@ def build() -> str:
         ["podman", "build", "-f", str(CONTAINERFILE), "-t", IMAGE_TAG, "."],
         check=True,
     )
-    raw = subprocess.check_output(
-        ["podman", "inspect", "--format={{.Id}}", IMAGE_TAG],
-    ).decode().strip()
+    raw = (
+        subprocess.check_output(
+            ["podman", "inspect", "--format={{.Id}}", IMAGE_TAG],
+        )
+        .decode()
+        .strip()
+    )
     image_hash = raw.split(":", 1)[-1]
     LOCK_FILE.write_text(image_hash + "\n")
     return image_hash

@@ -4,6 +4,7 @@
 tests drive `_screen_probe_hypotheses` directly, so the probe's grounding path stays
 correct without needing a live model run to exercise it.
 """
+
 from __future__ import annotations
 
 from cli import _screen_probe_hypotheses
@@ -26,7 +27,12 @@ def _hyp(attack_type, inputs, confidence=0.8, **over):
 # a subprocess call with shell off and an unresolved argv, plus a file write whose
 # path is a parameter.
 _RUN_FACTS = [
-    {"type": "subprocess", "shell": "default_false", "argv_style": "unknown", "arg_source": "unknown"},
+    {
+        "type": "subprocess",
+        "shell": "default_false",
+        "argv_style": "unknown",
+        "arg_source": "unknown",
+    },
     {"type": "file_write", "path_source": "parameter:stderr_log_path"},
 ]
 
@@ -60,7 +66,9 @@ def test_command_injection_metachars_contradicted_and_dropped():
 def test_path_traversal_grounded_keeps_full_confidence():
     outcomes, accepted, kept = _screen_probe_hypotheses(
         [_hyp("path_traversal", ["../../etc/passwd"], confidence=0.6)],
-        _RUN_FACTS, ["import subprocess"], "deadbeef",
+        _RUN_FACTS,
+        ["import subprocess"],
+        "deadbeef",
     )
     assert accepted == 1
     assert kept == 1
@@ -74,7 +82,9 @@ def test_path_traversal_grounded_keeps_full_confidence():
 def test_unrecognised_class_with_sink_is_unknown_and_capped():
     outcomes, accepted, kept = _screen_probe_hypotheses(
         [_hyp("Container name injection", ["evil"], confidence=0.7)],
-        _RUN_FACTS, ["import subprocess"], "deadbeef",
+        _RUN_FACTS,
+        ["import subprocess"],
+        "deadbeef",
     )
     assert accepted == 1
     assert kept == 1
@@ -86,9 +96,9 @@ def test_unrecognised_class_with_sink_is_unknown_and_capped():
 
 def test_outcomes_preserve_input_order_and_counts():
     hyps = [
-        _hyp("command_injection", ["; rm -rf /"]),   # contradicted, dropped
+        _hyp("command_injection", ["; rm -rf /"]),  # contradicted, dropped
         _hyp("path_traversal", ["../x"], confidence=0.6),  # grounded, kept
-        _hyp("sql_injection", ["' OR 1=1"]),         # no db import: unsupported, dropped
+        _hyp("sql_injection", ["' OR 1=1"]),  # no db import: unsupported, dropped
     ]
     outcomes, accepted, kept = _screen_probe_hypotheses(
         hyps, _RUN_FACTS, ["import subprocess"], "deadbeef"

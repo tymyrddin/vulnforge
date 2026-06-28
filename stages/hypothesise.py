@@ -3,6 +3,7 @@ attack-relevant hypotheses. Output is validated against the Hypothesis schema.
 
 Inference runs inside the canonical sandbox. The model can only ever produce
 Status.PROPOSED; verdict transitions live in verify.py."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -57,30 +58,39 @@ def run(slices_ref: str, *, model_alias: str, seed: int, max_tokens: int = 512) 
         except RuntimeError:
             continue
 
-        for idx, hypothesis in enumerate(_parse_hypotheses(result.output_text, slice_id, result.weights_hash)):
+        for idx, hypothesis in enumerate(
+            _parse_hypotheses(result.output_text, slice_id, result.weights_hash)
+        ):
             hyp_id = f"{slice_id}::{idx}"
-            blob = json.dumps(dataclasses.asdict(hypothesis), sort_keys=True, separators=(",", ":")).encode()
+            blob = json.dumps(
+                dataclasses.asdict(hypothesis), sort_keys=True, separators=(",", ":")
+            ).encode()
             hypotheses[hyp_id] = objects.put(blob)
 
     manifest_bytes = json.dumps(hypotheses, sort_keys=True, separators=(",", ":")).encode()
     hypotheses_ref = objects.put(manifest_bytes)
     refs.write("hypotheses_latest", hypotheses_ref)
-    audit_append(AuditEvent(
-        timestamp=time.time(),
-        stage="hypothesise",
-        input_refs=(slices_ref,),
-        output_refs=(hypotheses_ref,),
-        model_hash=spec.sha256,
-        seed=seed,
-        summary=f"{len(hypotheses)} hypotheses from {len(slice_manifest)} slices",
-    ))
+    audit_append(
+        AuditEvent(
+            timestamp=time.time(),
+            stage="hypothesise",
+            input_refs=(slices_ref,),
+            output_refs=(hypotheses_ref,),
+            model_hash=spec.sha256,
+            seed=seed,
+            summary=f"{len(hypotheses)} hypotheses from {len(slice_manifest)} slices",
+        )
+    )
     return hypotheses_ref
 
 
 def _render_fact(f: dict[str, Any]) -> str:
     t = f.get("type", "")
     if t == "subprocess":
-        return f"subprocess(shell={f['shell']}, argv={f['argv_style']}, arg={f.get('arg_source', 'unknown')})"
+        return (
+            f"subprocess(shell={f['shell']}, argv={f['argv_style']}, "
+            f"arg={f.get('arg_source', 'unknown')})"
+        )
     if t in ("file_write", "file_read"):
         return f"{t.replace('_', ' ')}: path from {f['path_source']}"
     if t == "dangerous_sink":
@@ -163,7 +173,9 @@ def _parse_hypotheses(text: str, slice_id: str, model_hash: str) -> list[Hypothe
                 confidence=float(item.get("confidence", 0.5)),
                 model_hash=model_hash,
                 evidence_type=EvidenceType(item.get("evidence_type", "static_pattern")),
-                verification_status=VerificationStatus(item.get("verification_status", "unverified")),
+                verification_status=VerificationStatus(
+                    item.get("verification_status", "unverified")
+                ),
             )
         except (KeyError, ValueError, TypeError):
             continue

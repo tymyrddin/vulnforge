@@ -1,6 +1,7 @@
 """Named pointers to object digests. Same separation git uses (branches vs
 commits): refs are mutable, the objects they point at are not. Lives under
 the active workspace at ``<workspace>/store/refs/``."""
+
 from __future__ import annotations
 
 from workspace import active

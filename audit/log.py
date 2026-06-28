@@ -4,6 +4,7 @@ Tampering with any past entry invalidates every entry after it. Verification
 walks the file linearly and is exposed via `verify_chain()`. Field order is
 canonicalised (sort_keys=True) so digests are deterministic across runs.
 """
+
 from __future__ import annotations
 
 import hashlib

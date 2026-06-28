@@ -15,10 +15,10 @@ load() builds a CWE -> [CVE/GHSA IDs] index in memory. It returns None when
 the data directory does not exist so callers can skip the lookup gracefully on
 a machine that has not run bootstrap.
 """
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from cve.cwe_map import ATTACK_TYPE_TO_CWES
@@ -46,9 +46,7 @@ def load() -> CveDb | None:
         if not ref:
             continue
 
-        cwe_ids: list[str] = (
-            (entry.get("database_specific") or {}).get("cwe_ids") or []
-        )
+        cwe_ids: list[str] = (entry.get("database_specific") or {}).get("cwe_ids") or []
         for cwe in cwe_ids:
             db.setdefault(cwe, []).append(ref)
 
