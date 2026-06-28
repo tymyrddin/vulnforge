@@ -18,6 +18,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+# Firmware front-end (Cortex-M Thumb). Opt-in so the core stays click+pyyaml.
+# The QEMU execution backend additionally needs a system qemu-system-arm binary.
+firmware = [
+    "capstone>=5.0",
+]
 
 [project.scripts]
 vulnforge = "cli:main"

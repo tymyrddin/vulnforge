@@ -1,0 +1,29 @@
+# STM32F405 peripheral map (knowledge layer for the Thumb front-end).
+#
+# Addresses come from the CMSIS device header in STM32CubeF4 (stm32f405xx.h),
+# not from the disassembler. This is the split the decision record names: the
+# decoder reports a store to an address, this map says which peripheral that
+# address is. QEMU's own (approximate) peripheral labels are ignored in favour
+# of this.
+#
+# Minimal on purpose: the watchdogs are what the first vertical needs. The map
+# grows per device, the decoder does not.
+device: STM32F405
+peripherals:
+  - name: IWDG
+    base: 0x40003000
+    size: 0x400
+    role: watchdog
+    registers:
+      - {offset: 0x00, name: KR}   # key register; write controls the watchdog
+      - {offset: 0x04, name: PR}
+      - {offset: 0x08, name: RLR}
+      - {offset: 0x0C, name: SR}
+  - name: WWDG
+    base: 0x40002C00
+    size: 0x400
+    role: watchdog
+    registers:
+      - {offset: 0x00, name: CR}
+      - {offset: 0x04, name: CFR}
+      - {offset: 0x08, name: SR}

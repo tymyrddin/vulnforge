@@ -5,8 +5,12 @@ already exists is in [../architecture/](../architecture/); why those things were
 built the way they were is in [../decisions/](../decisions/); what a real scan
 produced is in [../metrics/README.md](../metrics/README.md).
 
-Two forward-looking design notes live beside this index:
+Three forward-looking design notes live beside this index:
 
+- [ot-ics-direction.md](ot-ics-direction.md): the OT/ICS direction, facts as a
+  semantic evidence substrate, and the first firmware vertical to build. Its
+  architectural calls are settled in
+  [../decisions/2026-06-26-semantic-evidence-substrate.md](../decisions/2026-06-26-semantic-evidence-substrate.md).
 - [verdict-pipeline.md](verdict-pipeline.md): the unbuilt moves of the verdict
   pipeline (closed-enum outcomes, end-to-end ref verification, the correlation loop).
 - [run-concept.md](run-concept.md): a deferred `Run` vs `Workspace` separation.
@@ -17,15 +21,15 @@ These items are scoped but not built. Priority is a rough ordering, not a commit
 
 ### Feature expansion and integration
 
-| Task                        | Priority | Notes                                                                                                                                                                                                                                                                                              |
-|-----------------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Model management            | High     | `bootstrap/fetch_models.py` works with `models.lock`. Wanted: `vulnforge model list`, `vulnforge model use <alias>`, automatic model selection. Currently supports qwen3-8b (hypothesise) and qwen2.5-coder-7b (synthesise).                                                                       |
-| CVE model fallback          | Low      | CWE-based lookup is built and deterministic on `attack_type`. The model fallback for ambiguous matches is not built.                                                                                                                                                                              |
-| Multi-language support      | Medium   | Extend `index.py` beyond Python. Tree-sitter for JavaScript, Go, Rust, C/C++. Each language gets its own AST to slice converter, and implements the same `list[SecurityFact]` contract so the screen stage works unchanged.                                                                        |
-| Payload dispatch            | Medium   | synthesise tags each payload with a variant `category` (baseline, encoded, oversized, unicode, nested, polyglot), but `execute.py` passes every payload as the function's first argument. Dispatch by delivery channel (stdin, file, network) is a separate idea, not built.                       |
-| Correlation loop            | Med-High | Correlate confirmed findings across hypotheses into multi-stage exploit chains. The measurement half of this is Move 4 in [verdict-pipeline.md](verdict-pipeline.md), tracked under measurement tooling below.                                                                                      |
-| Plugin architecture         | Medium   | Allow custom checkers: `cargo-audit` (Rust), `pip-audit` (Python), `semgrep` rules, CodeQL queries. Run before or alongside AI stages.                                                                                                                                                            |
-| Sandbox fidelity            | Low      | Firmware analysis: QEMU emulation for ARM, RISC-V, MIPS, to run firmware images in the sandbox. Currently out of scope.                                                                                                                                                                           |
+| Task                   | Priority | Notes                                                                                                                                                                                                                                                                        |
+|------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Model management       | High     | `bootstrap/fetch_models.py` works with `models.lock`. Wanted: `vulnforge model list`, `vulnforge model use <alias>`, automatic model selection. Currently supports qwen3-8b (hypothesise) and qwen2.5-coder-7b (synthesise).                                                 |
+| CVE model fallback     | Low      | CWE-based lookup is built and deterministic on `attack_type`. The model fallback for ambiguous matches is not built.                                                                                                                                                         |
+| Multi-language support | Medium   | Extend `index.py` beyond Python. Tree-sitter for JavaScript, Go, Rust, C/C++. Each language gets its own AST to slice converter, and implements the same `list[SecurityFact]` contract so the screen stage works unchanged.                                                  |
+| Payload dispatch       | Medium   | synthesise tags each payload with a variant `category` (baseline, encoded, oversized, unicode, nested, polyglot), but `execute.py` passes every payload as the function's first argument. Dispatch by delivery channel (stdin, file, network) is a separate idea, not built. |
+| Correlation loop       | Med-High | Correlate confirmed findings across hypotheses into multi-stage exploit chains. The measurement half of this is Move 4 in [verdict-pipeline.md](verdict-pipeline.md), tracked under measurement tooling below.                                                               |
+| Plugin architecture    | Medium   | Allow custom checkers: `cargo-audit` (Rust), `pip-audit` (Python), `semgrep` rules, CodeQL queries. Run before or alongside AI stages.                                                                                                                                       |
+| Sandbox fidelity       | Low      | Firmware analysis: QEMU emulation for ARM, RISC-V, MIPS, to run firmware images in the sandbox. Currently out of scope.                                                                                                                                                      |
 
 ### Advanced capabilities and research
 
@@ -39,11 +43,15 @@ These items are scoped but not built. Priority is a rough ordering, not a commit
 
 ## Immediate priorities
 
+The OT/ICS direction in [ot-ics-direction.md](ot-ics-direction.md) sets the lead: one
+firmware vertical driven to CONFIRMED. The numbered items below are the
+language-neutral spine that direction builds on.
+
 1. Run on code with real surface. The only end-to-end run so far is `stages/`, which
    has almost no sinks, so the grounded, contradicted, and confirmed paths have never
    fired. A corpus with real command-running, file-handling, and untrusted-input
    parsing exercises them, and produces the confirmations the policy-calibration
-   question (Open questions) needs.
+   question (Open questions) needs. The firmware vertical is the chosen concrete form.
 2. Model management CLI (Backlog: High).
 3. Tune the hypothesise and synthesise prompts against real results.
 4. First new-language extractor, JavaScript (Backlog: Multi-language support).

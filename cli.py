@@ -1,7 +1,8 @@
 """vulnforge CLI. Subcommands: bootstrap (the one network step), scan (run
-the analysis pipeline), audit-verify (walk the audit log hash chain), plumbing
-(end-to-end smoke test), and probe (one-shot hypothesise against a single
-file, bypassing the staged pipeline)."""
+the analysis pipeline), firmware-scan (the Cortex-M vertical: decode, screen,
+run, verify, then the safety and compliance consumers), audit-verify (walk the
+audit log hash chain), plumbing (end-to-end smoke test), and probe (one-shot
+hypothesise against a single file, bypassing the staged pipeline)."""
 from __future__ import annotations
 
 import subprocess
@@ -55,6 +56,64 @@ def scan(repo: Path, workspace_opt: Path | None) -> None:
     ws = _resolve_workspace(workspace_opt)
     click.echo(f"workspace: {ws.root}")
     pipeline.run(repo_path=repo)
+    click.echo(f"workspace: {ws.root}")
+
+
+@main.command(name="firmware-scan")
+@click.argument("image", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--device", "device_config",
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=Path(__file__).resolve().parent / "configs" / "stm32f405.yaml",
+              show_default=True, help="Device peripheral map (knowledge layer).")
+@click.option("--load-addr", default="0x08000000", show_default=True,
+              help="Address the image is mapped at.")
+@click.option("--workspace", "workspace_opt", type=click.Path(path_type=Path),
+              default=None, help="Workspace directory (overrides default run dir).")
+def firmware_scan(
+    image: Path, device_config: Path, load_addr: str, workspace_opt: Path | None
+) -> None:
+    """Decode a Cortex-M firmware IMAGE, screen, run it, verify, and read the same
+    facts through the safety and compliance consumers."""
+    import json
+
+    from store import objects
+
+    try:
+        from consumers import compliance, safety
+        from orchestrator import firmware
+    except ImportError as e:
+        raise click.ClickException(
+            f"firmware support needs the [firmware] extra (capstone): {e}"
+        ) from e
+
+    try:
+        addr = int(load_addr, 0)
+    except ValueError as e:
+        raise click.ClickException(f"invalid --load-addr: {load_addr!r}") from e
+
+    ws = _resolve_workspace(workspace_opt)
+    click.echo(f"workspace: {ws.root}")
+    click.echo(f"firmware:  {image}")
+
+    try:
+        verdict = firmware.run(image, device_config, load_addr=addr)
+    except RuntimeError as e:
+        raise click.ClickException(str(e)) from e
+
+    click.echo(f"verdict:   {verdict['status'].upper()}  ({verdict['predicate']})")
+    if verdict.get("evidence"):
+        click.echo(f"  {verdict['evidence']}")
+
+    facts = json.loads(objects.get(verdict["facts_ref"]))
+    for f in safety.assess(facts):
+        loc = f"{f['peripheral']}.{f['register']} @ 0x{f['address']:08x}"
+        click.echo(f"safety:    {f['property']}  {loc}")
+    for f in compliance.assess(facts):
+        loc = f"{f['peripheral']}.{f['register']} @ 0x{f['address']:08x}"
+        click.echo(
+            f"compliance: {f['candidate_control']} ({f['standard']})  {loc}  [{f['disposition']}]"
+        )
+
     click.echo(f"workspace: {ws.root}")
 
 
