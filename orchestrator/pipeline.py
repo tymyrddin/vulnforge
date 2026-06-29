@@ -85,8 +85,10 @@ def run(repo_path: Path, config_path: Path | None = None) -> None:
 
         elif name == "verify":
             assert observations_ref, "execute must run before verify"
-            assert hypotheses_ref, "hypothesise must run before verify"
-            verdicts_ref = verify.run(observations_ref, hypotheses_ref)
+            assert payloads_ref, "synthesise must run before verify"
+            verdicts_ref = verify.run(
+                observations_ref, payloads_ref, capabilities=execute.OBSERVED_CHANNELS
+            )
             print(f"verify       -> {verdicts_ref[:12]}")
 
         elif name == "report":

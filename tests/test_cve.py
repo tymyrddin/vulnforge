@@ -91,27 +91,38 @@ def test_verify_attaches_cve_refs_to_confirmed_verdict():
             json.dumps(dataclasses.asdict(h), sort_keys=True, separators=(",", ":")).encode()
         )
 
-        obs = {
-            "payload_id": "p0",
+        # The plan predicts a marker in output; the observation shows it. That is the
+        # positive evidence that confirms, not a nonzero exit code.
+        token = "VULNFORGE_TESTMARKER"
+        payload_id = "app.py::vulnerable_eval::0::0"
+        payload = {
             "hypothesis_id": "app.py::vulnerable_eval::0",
-            "exit_code": 1,
-            "stdout": "",
-            "stderr": "SyntaxError",
+            "value": "1+1",
+            "expected_outcomes": [{"kind": "output_contains", "token": token}],
+        }
+        payload_ref = objects.put(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        )
+        payloads_manifest_ref = objects.put(
+            json.dumps({payload_id: payload_ref}, sort_keys=True, separators=(",", ":")).encode()
+        )
+
+        obs = {
+            "payload_id": payload_id,
+            "hypothesis_id": "app.py::vulnerable_eval::0",
+            "exit_code": 0,
+            "stdout": f"{token}\n",
+            "stderr": "",
             "timed_out": False,
             "tested_hypothesis_ref": tested_hyp_ref,
         }
         obs_ref = objects.put(json.dumps(obs, sort_keys=True, separators=(",", ":")).encode())
         obs_manifest_ref = objects.put(
-            json.dumps(
-                {"app.py::vulnerable_eval::0::0": obs_ref}, sort_keys=True, separators=(",", ":")
-            ).encode()
-        )
-        hyp_manifest_ref = objects.put(
-            json.dumps({}, sort_keys=True, separators=(",", ":")).encode()
+            json.dumps({payload_id: obs_ref}, sort_keys=True, separators=(",", ":")).encode()
         )
 
         with mock.patch("stages.verify.cve_index.load", return_value=fixture_db):
-            verdicts_ref = verify.run(obs_manifest_ref, hyp_manifest_ref)
+            verdicts_ref = verify.run(obs_manifest_ref, payloads_manifest_ref)
 
         verdict_manifest = json.loads(objects.get(verdicts_ref))
         assert verdict_manifest, "no verdicts produced"

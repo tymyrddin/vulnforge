@@ -29,6 +29,11 @@ from schema.hypothesis import (
 from store import objects, refs
 from workspace import active as active_workspace
 
+# The observation channels this executor can currently produce. Verify uses this to
+# decide whether an expected outcome is observable. Adding instrumentation (filesystem,
+# subprocess, network tracing) extends this set without changing the outcome vocabulary.
+OBSERVED_CHANNELS = frozenset({"process"})
+
 
 def mark_tested(h: Hypothesis, attempts: int) -> Hypothesis:
     if h.status is not Status.PROPOSED:
@@ -73,13 +78,10 @@ def run(payloads_ref: str, target_ref: str, *, timeout_seconds: int) -> str:
 
         target_bytes = objects.get(file_hash)
         payload_value = payload.get("value", "")
-        marker = payload.get("marker", "")
 
         start = time.monotonic()
         obs = _run_payload(target_bytes, payload_value, payload_id, hyp_id, timeout_seconds)
         obs["duration_seconds"] = round(time.monotonic() - start, 3)
-        if marker:
-            obs["marker"] = marker
 
         try:
             h = _load_hypothesis(hyp_data)

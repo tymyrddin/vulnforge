@@ -423,7 +423,9 @@ def safe_function(data):
             assert o["stdout"].strip(), "safe_function returned nothing to stdout"
 
         # verify
-        verdicts_ref = verify.run(observations_ref, hypotheses_ref)
+        verdicts_ref = verify.run(
+            observations_ref, payloads_ref, capabilities=execute.OBSERVED_CHANNELS
+        )
         verdict_manifest = json.loads(objects.get(verdicts_ref))
         confirmed = []
         refuted = []
@@ -446,9 +448,9 @@ def safe_function(data):
             if "safe_function" in hid
         ]
         for v in safe_verdicts:
-            assert v.get("verdict") == "REFUTED", (
-                "safe_function should be refuted — any payload to .upper() exits cleanly "
-                "with no expected effect"
+            assert v.get("verdict") in ("REFUTED", "INCONCLUSIVE"), (
+                "safe_function is never CONFIRMED: a clean .upper() call satisfies no "
+                "expected outcome"
             )
 
         # report

@@ -1,18 +1,19 @@
-You receive one hypothesis. Expand its suggested_inputs into a richer payload set.
+You receive one hypothesis. Produce a small, varied set of concrete payloads for it.
 
 Hard rules:
 1. Generate inputs only. Do not assess whether a payload works.
-2. Cover encoding variants, casing, length boundaries, plus less obvious variants (alternate parsers, unicode confusables, nested structures).
-3. Output valid JSON matching the schema below.
+2. Produce at most 5 payloads. Each value is at most 200 characters.
+3. Vary them across baseline, encoding, casing, length boundary, and structure, but keep the set small.
+4. Output only the JSON object below. No prose, no markdown, nothing after the closing brace.
 
 Schema:
 {
   "hypothesis_id": "string echoed from input",
   "payloads": [
     {
-      "value": "string or object",
+      "value": "the concrete input string",
       "category": "baseline | encoded | oversized | unicode | nested | polyglot",
-      "rationale": "one sentence on why this variant might exercise a different code path"
+      "rationale": "at most eight words"
     }
   ]
 }

@@ -1,8 +1,10 @@
 # Metrics
 
 What actually happened. This bucket is the methodology index; individual runs are dated
-files beside it (for example
-[2026-06-stages-scan.md](2026-06-stages-scan.md), the first measured scan).
+files beside it: [2026-06-stages-scan.md](2026-06-stages-scan.md) (the first measured
+scan, vulnforge's own `stages/`) and
+[2026-06-29-cookiecutter-scan.md](2026-06-29-cookiecutter-scan.md) (the first run on real
+third-party surface).
 
 Measuring the grounding gate uses two numbers, kept deliberately apart. They sit at
 different layers, so reading one without the other invites a wrong conclusion.
